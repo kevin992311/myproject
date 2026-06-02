@@ -33,18 +33,46 @@ console.log('SQLITE CONNECTED');
 // SQLITE TABLES
 // =========================
 
-db.serialize(() => {
-    // Users table
-    db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT, balance REAL DEFAULT 0, totalDeposited REAL DEFAULT 0, totalWithdrawn REAL DEFAULT 0, totalWagered REAL DEFAULT 0, ip TEXT, loginTime TEXT, bindName TEXT, bindNum TEXT)");
-    
-    // Deposits table
-    db.run("CREATE TABLE IF NOT EXISTS deposits (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, amount REAL, receipt TEXT, status TEXT, createdAt TEXT)");
-    
-    // Withdrawals table
-    db.run("CREATE TABLE IF NOT EXISTS withdrawals (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, amount REAL, accountNumber TEXT, status TEXT, createdAt TEXT)");
-    
-    console.log('SQLITE TABLES READY');
-});
+db.exec(`
+CREATE TABLE IF NOT EXISTS users (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+username TEXT UNIQUE,
+balance REAL DEFAULT 0,
+totalDeposited REAL DEFAULT 0,
+totalWithdrawn REAL DEFAULT 0,
+totalWagered REAL DEFAULT 0,
+ip TEXT,
+loginTime TEXT
+);
+
+CREATE TABLE IF NOT EXISTS deposits (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+username TEXT,
+amount REAL,
+receipt TEXT,
+status TEXT,
+createdAt TEXT
+);
+
+CREATE TABLE IF NOT EXISTS withdrawals (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+username TEXT,
+amount REAL,
+accountNumber TEXT,
+status TEXT,
+createdAt TEXT
+);
+
+CREATE TABLE IF NOT EXISTS bets (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+username TEXT,
+game TEXT,
+amount REAL,
+createdAt TEXT
+);
+`);
+
+console.log('SQLITE TABLES READY');
 
 // =========================
 // SOCKET IO
