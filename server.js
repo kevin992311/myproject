@@ -3,7 +3,7 @@
 // =========================
 
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+const Database = require('better-sqlite3');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const http = require('http');
@@ -26,13 +26,8 @@ if (!fs.existsSync(uploadDir)){
 // SQLITE CONNECTION
 // =========================
 
-const db = new sqlite3.Database('./stakewin.db', (err) => {
-    if (err) {
-        console.error(err.message);
-    } else {
-        console.log('SQLITE CONNECTED');
-    }
-});
+const db = new Database('./stakewin.db');
+console.log('SQLITE CONNECTED');
 
 // =========================
 // SQLITE TABLES
