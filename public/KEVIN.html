@@ -500,7 +500,7 @@
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
     <script>
-        const socket = io();
+        const socket = io("https://myproject-production-a8c0.up.railway.app/");
 
         socket.on("connect", () => {
             console.log("CONNECTED TO BACKEND");
@@ -1387,7 +1387,7 @@
             formData.append('receipt', file);
 
             try {
-                const res = await fetch('/deposit', {
+                const res = await fetch('https://myproject-production-a8c0.up.railway.app/', {
                     method: 'POST',
                     body: formData
                 });
@@ -1671,7 +1671,7 @@
                 depTable.innerHTML = '<tr><td colspan="5">Loading API...</td></tr>';
                 
                 try {
-                    const res = await fetch('/deposits');
+                    const res = await fetch('https://myproject-production-a8c0.up.railway.app/');
                     const deposits = await res.json();
                     
                     depTable.innerHTML = '';
