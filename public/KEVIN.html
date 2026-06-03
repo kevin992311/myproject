@@ -500,52 +500,66 @@
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
     <script>
+        // RAILWAY BACKEND CONNECTION
         const socket = io("https://myproject-production-a8c0.up.railway.app/");
 
         socket.on("connect", () => {
-            console.log("CONNECTED TO BACKEND");
+            console.log("✅ CONNECTED TO RAILWAY BACKEND");
+            // Notify admin panel if open
+            const notif = document.getElementById('adm-pend-dep');
+            if(notif) notif.style.color = "#00e701";
         });
 
-        let currentMultiplier = 1;
-        let aviatorInterval = null;
+        socket.on("disconnect", () => {
+            console.log("⚠️ DISCONNECTED FROM BACKEND");
+        });
 
+        // REALTIME GAME STATE SYNC
+        // This ensures the frontend visualizes exactly what the Railway backend dictates
         socket.on("stateUpdate", (data) => {
+            console.log("State Update:", data);
+            
+            // 1. SYNC GAME STATE VARIABLES
+            if (data.phase) gameState.phase = data.phase;
+            if (data.crashPoint) gameState.crashPoint = data.crashPoint;
+            if (data.timer) gameState.timer = data.timer;
+            if (data.currentMultiplier) gameState.mult = data.currentMultiplier;
 
-            const aviator = data.aviator;
-
+            // 2. UPDATE UI ELEMENTS BASED ON BACKEND STATE
             const bigTimer = document.getElementById("bigTimer");
+            const plane = document.getElementById("plane");
+            const overlay = document.getElementById("countdown-overlay");
 
-            if(bigTimer){
-
-                // WAITING COUNTDOWN
-                if(aviator.phase === "WAITING"){
-
-                    bigTimer.innerText = Math.ceil(aviator.timer);
-
-                    // Extra improvement: Scale animation
-                    bigTimer.style.transform = "scale(1.2)";
-                    setTimeout(()=>{
-                        bigTimer.style.transform = "scale(1)";
-                    },100);
-
+            if (gameState.type === 'aviator') {
+                if (gameState.phase === "WAITING") {
+                    if(bigTimer) bigTimer.innerText = Math.ceil(gameState.timer);
+                    if(overlay) overlay.style.display = 'flex';
+                    if(overlay) overlay.innerText = Math.ceil(gameState.timer);
+                    if(plane) plane.style.transform = `rotate(-45deg)`;
+                } 
+                else if (gameState.phase === "FLYING") {
+                    if(bigTimer) bigTimer.innerText = "✈";
+                    if(overlay) overlay.style.display = 'none';
+                    // Plane animation is handled in loopAviator based on gameState.mult
+                } 
+                else if (gameState.phase === "CRASHED") {
+                    if(bigTimer) {
+                        bigTimer.innerText = "💥";
+                        bigTimer.style.color = "var(--red)";
+                        bigTimer.style.fontSize = "50px";
+                    }
+                    if(plane) plane.style.transform = `rotate(180deg)`;
+                    if(!gameState.hasCashedOut && gameState.hasBet) { 
+                        showCustomPopup('loss', 'CRASHED', '0.00', `Plane flew away at ${gameState.crashPoint}x`); 
+                    }
+                    // Update History
+                    aviatorHistory.unshift({ val: gameState.crashPoint }); 
+                    if(aviatorHistory.length > 15) aviatorHistory.pop();
+                    updateAviatorHistory();
                 }
-
-                // FLYING
-                else if(aviator.phase === "FLYING"){
-
-                    bigTimer.innerText = "✈";
-
-                }
-
-                // CRASHED
-                else if(aviator.phase === "CRASHED"){
-
-                    bigTimer.innerText = "💥";
-
-                }
-
             }
         });
+
     </script>
 
     <script>
@@ -857,36 +871,33 @@
         function loopAviator() {
             if(gameState.type !== 'aviator') return;
             const overlay = document.getElementById('countdown-overlay');
-            // Use bigTimer element reference
             const bigTimer = document.getElementById('bigTimer');
             const btn = document.getElementById('game-btn');
             const indicator = document.getElementById('aviator-bet-indicator');
 
+            // Only run logic if socket hasn't overridden the state completely
             if (gameState.phase === 'WAITING') {
                 overlay.style.display = 'flex'; overlay.innerText = Math.ceil(gameState.timer); 
                 if(bigTimer) {
                     bigTimer.style.color = 'white'; 
                     bigTimer.style.fontSize = '80px';
+                    bigTimer.innerText = Math.ceil(gameState.timer);
                 }
                 document.getElementById('plane').style.transform = `rotate(-45deg)`;
                 
-                // Keep indicator visible if bet placed in waiting phase
-                if(gameState.hasBet && indicator) {
-                    indicator.style.display = 'flex';
-                } else if (indicator) {
-                    indicator.style.display = 'none';
-                }
+                if(gameState.hasBet && indicator) indicator.style.display = 'flex';
+                else if (indicator) indicator.style.display = 'none';
 
                 btn.innerText = "PLACE BET"; btn.className = "btn btn-primary"; btn.disabled = false;
             } 
             else if (gameState.phase === 'FLYING') {
                 overlay.style.display = 'none';
                 gameState.mult = getMultiplier();
-                // Note: Text is now handled by socket, but we keep local multiplier for cashout calc
+                
                 const elapsed = (gameState.mult - 1) / 0.15;
                 document.getElementById('plane').style.transform = `translate(${50+elapsed*100}px, -${50+elapsed*50}px) rotate(-15deg)`;
                 
-                if(indicator) indicator.style.display = 'none'; // Hide indicator once flying
+                if(indicator) indicator.style.display = 'none'; 
 
                 if(gameState.hasBet && !gameState.hasCashedOut) {
                     btn.innerText = "CASHOUT"; btn.className = "btn btn-danger";
@@ -897,17 +908,16 @@
                 if(gameState.mult >= gameState.crashPoint) crashPlane();
             } 
             else if (gameState.phase === 'CRASHED') {
+                // Handled primarily by socket, but here as fallback
                 if(bigTimer) {
                     bigTimer.style.color = "var(--red)"; 
                     bigTimer.style.fontSize = "50px"; 
                 }
                 document.getElementById('plane').style.transform = `rotate(180deg)`;
-                if(!gameState.hasCashedOut && gameState.hasBet) { showCustomPopup('loss', 'CRASHED', '0.00', `Plane flew away.`); }
-                aviatorHistory.unshift({ val: gameState.crashPoint }); if(aviatorHistory.length > 15) aviatorHistory.pop();
-                updateAviatorHistory();
+                if(!gameState.hasCashedOut && gameState.hasBet) { 
+                    // showCustomPopup('loss', 'CRASHED', '0.00', `Plane flew away.`); 
+                }
                 btn.innerText = "WAITING..."; btn.className = "btn btn-primary"; btn.disabled = true; 
-                
-                // Reset bet state visuals
                 if(indicator) indicator.style.display = 'none';
             }
             requestAnimationFrame(loopAviator);
@@ -929,26 +939,31 @@
             setTimeout(() => {
                 gameState.phase = 'WAITING'; gameState.timer = 5; gameState.running = false; gameState.hasBet = false; gameState.hasCashedOut = false;
                 
-                // --- THE PSYCHOLOGICAL ALGORITHM ---
+                // --- THE PSYCHOLOGICAL ALGORITHM (FALLBACK IF BACKEND DOESN'T SEND CRASH POINT) ---
                 let point = Math.random() * 10; // Base random
                 
-                // 1. Hope Phase (If manipulation is low/neutral)
-                if(manipulationLevel === 0) {
-                    point = 2.0 + Math.random() * 5; // Let it fly (2x to 7x) - Give hope
+                // If backend set a crash point via socket or admin, use that
+                if(gameState.crashPoint > 0) {
+                    point = gameState.crashPoint;
+                } else {
+                    // 1. Hope Phase (If manipulation is low/neutral)
+                    if(manipulationLevel === 0) {
+                        point = 2.0 + Math.random() * 5; // Let it fly (2x to 7x) - Give hope
+                    }
+                    // 2. Destroy Phase (If they are winning too much)
+                    else if (manipulationLevel >= 3) {
+                        point = 1.0 + Math.random() * 0.2; // CRASH INSTANT (1.0x to 1.2x) - Destroy psychology
+                    }
+                    // 3. tease Phase (They lost a bit, give a small win)
+                    else if (manipulationLevel < 0) {
+                         point = 1.5 + Math.random() * 1.0; // Small win (1.5x - 2.5x)
+                    }
+                    
+                    // Override by admin if set
+                    const settings = DB.get('sw_settings');
+                    if(settings.crashPoint) point = settings.crashPoint;
                 }
-                // 2. Destroy Phase (If they are winning too much)
-                else if (manipulationLevel >= 3) {
-                    point = 1.0 + Math.random() * 0.2; // CRASH INSTANT (1.0x to 1.2x) - Destroy psychology
-                }
-                // 3. tease Phase (They lost a bit, give a small win)
-                else if (manipulationLevel < 0) {
-                     point = 1.5 + Math.random() * 1.0; // Small win (1.5x - 2.5x)
-                }
-                
-                // Override by admin if set
-                const settings = DB.get('sw_settings');
-                if(settings.crashPoint) point = settings.crashPoint;
-                
+
                 gameState.crashPoint = point;
                 
                 // Countdown to flying
@@ -1387,6 +1402,7 @@
             formData.append('receipt', file);
 
             try {
+                // Direct connection to Railway Backend
                 const res = await fetch('https://myproject-production-a8c0.up.railway.app/', {
                     method: 'POST',
                     body: formData
