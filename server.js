@@ -343,6 +343,17 @@ app.get('/api/deposits', (req, res) => {
     });
 });
 
+app.get('/health', (req, res) => {
+    res.json({
+        success: true,
+        status: 'alive'
+    });
+});
+
+app.get('/', (req, res) => {
+    res.send('StakeWin Backend Alive');
+});
+
 // Get All Withdrawals
 app.get('/api/withdrawals', (req, res) => {
     db.all("SELECT * FROM withdrawals ORDER BY id DESC", [], (err, rows) => {
@@ -434,7 +445,7 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
     console.log('====================');
     console.log('SERVER RUNNING');
     console.log('PORT:', PORT);
