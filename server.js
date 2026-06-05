@@ -354,10 +354,17 @@ app.get('/', (req, res) => {
     res.send('StakeWin Backend Alive');
 });
 
-// Get All Withdrawals
+// withdrawals
 app.get('/api/withdrawals', (req, res) => {
     db.all("SELECT * FROM withdrawals ORDER BY id DESC", [], (err, rows) => {
-        if (err) return res.json({ success: false, error: err.message });
+        if (err) {
+            console.log("WITHDRAW ERROR:", err);
+            return res.status(500).json({
+                success: false,
+                error: err.message
+            });
+        }
+
         res.json(rows);
     });
 });
