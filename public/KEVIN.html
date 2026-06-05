@@ -1635,7 +1635,7 @@
             openModal('withdraw-modal');
         }
 
-        function initiateWithdraw() {
+        async function initiateWithdraw() {
             const amount = parseFloat(document.getElementById('with-amount').value);
             const name = document.getElementById('with-name').value.trim();
             const num = document.getElementById('with-num').value.trim();
@@ -1653,25 +1653,36 @@
             if(amount > currentUser.balance) return errDiv.innerText = "Insufficient balance.";
 
             if(confirm("Confirm Withdrawal Request?")) {
-                currentUser.balance -= amount;
-                DB.updateUser(currentUser);
-                updateUI();
-
-                const reqs = DB.get('sw_reqs');
-                reqs.push({
-                    id: Date.now(),
-                    type: 'withdraw',
-                    user: currentUser.username,
-                    amount: amount,
-                    details: `${name} - ${num}`,
-                    status: 'pending'
-                });
-                DB.save('sw_reqs', reqs);
-                
-                closeModal('withdraw-modal');
-                alert("Withdrawal Request Submitted Successfully!");
-            }
+                try {
+     const res = await fetch(
+        'https://myproject-production-a8c0.up.railway.app/withdraw',
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                username: currentUser.username,
+                amount: amount,
+                accountNumber: num,
+                name: name
+            })
         }
+    );
+
+    const data = await res.json();
+
+    if (data.success) {
+        closeModal('withdraw-modal');
+        alert('Withdrawal Request Submitted Successfully!');
+    } else {
+        errDiv.innerText = data.message || 'Withdrawal failed';
+    }
+
+} catch (err) {
+    console.error(err);
+    errDiv.innerText = 'Server error';
+}
 
         function openModal(id) { document.getElementById(id).classList.add('active'); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
@@ -1783,4 +1794,4 @@
 
     </script>
 </body>
-</html>
+</html> 
