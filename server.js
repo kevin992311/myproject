@@ -345,7 +345,7 @@ app.get('/api/deposits', (req, res) => {
         res.json(rows);
     } catch (err) {
         console.log(err);
-        res.status(500).json({
+        res.json({
             success: false,
             error: err.message
         });
@@ -373,7 +373,7 @@ app.get('/api/withdrawals', (req, res) => {
         res.json(rows);
     } catch (err) {
         console.log(err);
-        res.status(500).json({
+        res.json({
             success: false,
             error: err.message
         });
