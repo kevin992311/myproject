@@ -1606,13 +1606,17 @@
             formData.append('receipt', file);
 
             try {
-                fetch('https://myproject-production-a8c0.up.railway.app/deposit', {
-                    method: 'POST',
-                    body: formData
-                });
+              const res = await fetch('https://myproject-production-a8c0.up.railway.app/deposit', {
+    method: 'POST',
+    body: formData
+});
 
-                let data;
-                try { data = await res.json(); } catch (e) { throw new Error(`Server returned status: ${res.status} ${res.statusText}`); }
+let data;
+try {
+    data = await res.json();
+} catch (e) {
+    throw new Error(`Server returned status: ${res.status} ${res.statusText}`);
+}
 
                 if(data.success) {
                     closeModal('deposit-modal');
