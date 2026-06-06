@@ -276,15 +276,29 @@ app.post('/deposit', upload.single('receipt'), (req, res) => {
         const { username, amount } = req.body;
         const receiptFilename = req.file ? req.file.filename : null;
 
-        const sql = "INSERT INTO deposits (username, amount, receipt, status, createdAt) VALUES (?, ?, ?, 'PENDING', ?)";
-        db.run(sql, [username, Number(amount), receiptFilename, new Date().toISOString()], function(err) {
-            if (err) return res.json({ success: false, error: err.message });
-            res.json({ success: true, message: 'Deposit submitted' });
+        db.prepare(`
+            INSERT INTO deposits
+            (username, amount, receipt, status, createdAt)
+            VALUES (?, ?, ?, 'PENDING', ?)
+        `).run(
+            username,
+            Number(amount),
+            receiptFilename,
+            new Date().toISOString()
+        );
+
+        res.json({
+            success: true,
+            message: 'Deposit submitted'
         });
 
     } catch (err) {
         console.log(err);
-        res.json({ success: false });
+
+        res.json({
+            success: false,
+            error: err.message
+        });
     }
 });
 
