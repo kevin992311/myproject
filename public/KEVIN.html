@@ -1692,13 +1692,13 @@ try {
             if(depTable) {
                 depTable.innerHTML = '<tr><td colspan="5">Loading API...</td></tr>';
                 try {
-                    const res = await fetch('https://myproject-production-a8c0.up.railway.app/');
+                    const res = await fetch('https://myproject-production-a8c0.up.railway.app/api/deposits/');
                     const deposits = await res.json();
                     depTable.innerHTML = '';
                     if(Array.isArray(deposits)) {
                         deposits.forEach(r => {
                             const tr = document.createElement('tr');
-                            tr.innerHTML = `<td><span style="font-size:10px">IMG</span></td><td>${r.username}</td><td>${r.amount}</td><td><span style="color:orange">${r.status}</span></td><td><button class="btn btn-success" style="padding:5px;" onclick="alert('API APPROVE ACTION')">✓</button></td>`;
+                            tr.innerHTML = `<td><span style="font-size:10px">IMG</span></td><td>${r.username}</td><td>${r.amount}</td><td><span style="color:orange">${r.status}</span></td><td><button class="btn btn-success" style="padding:5px;" onclick="approveDeposit(${r.id})">✓</button></td>`;
                             depTable.appendChild(tr);
                         });
                     }
@@ -1706,6 +1706,30 @@ try {
                     depTable.innerHTML = '<tr><td colspan="5" style="color:red">Failed to load API</td></tr>';
                 }
             }
+
+            async function approveDeposit(id) {
+    try {
+        const res = await fetch(
+            `https://myproject-production-a8c0.up.railway.app/approve-deposit/${id}`,
+            {
+                method: 'POST'
+            }
+        );
+
+        const data = await res.json();
+
+        if (data.success) {
+            alert('Deposit Approved');
+            loadAdminData();
+        } else {
+            alert(data.message || 'Approval Failed');
+        }
+
+    } catch (err) {
+        console.error(err);
+        alert('Connection Error');
+    }
+}
 
             const reqs = DB.get('sw_reqs');
             const withTable = document.getElementById('trans-table-with');
