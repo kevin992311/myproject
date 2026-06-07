@@ -314,16 +314,21 @@ app.post('/withdraw', (req, res) => {
             if (!user) return res.json({ success: false, message: 'User not found' });
 
             const withdrawAmount = Number(amount);
-            const requiredWager = withdrawAmount * 2.6; // 2.6x Rule
+            // STRICT WAGERING: Must wager 2.6x their TOTAL DEPOSITS before withdrawal
+            const requiredWager = user.totalDeposited * 2.6;
 
             // Check 1: Balance
             if (user.balance < withdrawAmount) {
                 return res.json({ success: false, message: 'Insufficient balance' });
             }
 
-            // Check 2: Wagering Requirement
+            // Check 2: Wagering Requirement (2.6x of total deposits)
             if (user.totalWagered < requiredWager) {
-                return res.json({ success: false, message: `Wagering requirement not met! Required: ${requiredWager.toFixed(0)} PKR.` });
+                const stillNeed = Math.max(0, requiredWager - user.totalWagered).toFixed(0);
+                return res.json({ 
+                    success: false, 
+                    message: `Wagering requirement not met! Deposited: ${user.totalDeposited.toFixed(0)} | Wagered: ${user.totalWagered.toFixed(0)} | Required: ${requiredWager.toFixed(0)} | Still need: ${stillNeed} PKR.` 
+                });
             }
 
             // Deduct balance immediately

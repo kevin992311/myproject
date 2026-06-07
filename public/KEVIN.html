@@ -583,6 +583,20 @@
                     }
                 }
             });
+            socket.on("depositApproved", (data) => {
+                if(data && data.username === currentUser?.username) {
+                    currentUser.balance += data.amount;
+                    DB.updateUser(currentUser);
+                    updateUI();
+                    console.log("Deposit approved - balance updated");
+                }
+            });
+            socket.on("newDeposit", (data) => {
+                if(document.getElementById('admin-panel') && !document.getElementById('admin-panel').classList.contains('hidden')) {
+                    loadAdminData();
+                    console.log("New deposit - admin panel refreshed");
+                }
+            });
         } catch(e) {
             console.log("Socket IO not available or blocked.");
         }
@@ -777,25 +791,40 @@
                 setupAviatorUI(); requestAnimationFrame(loopAviator); startLeaderboard();
             } else if (game === 'wingo') {
                 controls.classList.add('hidden'); 
-                setupWingoUI(); // NEW WINGO UI
-                updateWingoUIFromServer(); // Initial Sync
+                setupWingoUI();
+                updateWingoUIFromServer();
                 if(wingoInterval) clearInterval(wingoInterval);
                 wingoInterval = setInterval(() => {
                     if(gameState.type !== 'wingo') return;
+                    // Only countdown if BETTING or LOCKING
                     if(gameState.wingo.phase === 'BETTING' || gameState.wingo.phase === 'LOCKING') {
-                        if(gameState.wingo.timer > 0) {
-                            gameState.wingo.timer = Math.max(0, Math.floor(gameState.wingo.timer - 1));
-                        }
-                        if(gameState.wingo.timer <= 10 && gameState.wingo.phase === 'BETTING') {
+                        gameState.wingo.timer = Math.max(0, gameState.wingo.timer - 1);
+                        // Transition to LOCKING at 10s
+                        if(gameState.wingo.timer === 10 && gameState.wingo.phase === 'BETTING') {
                             gameState.wingo.phase = 'LOCKING';
                         }
-                        if(gameState.wingo.timer <= 0 && gameState.wingo.phase !== 'RESULT') {
+                        // Transition to RESULT at 0s
+                        if(gameState.wingo.timer === 0 && gameState.wingo.phase === 'LOCKING') {
                             gameState.wingo.phase = 'RESULT';
-                            if(gameState.wingo.number === null) gameState.wingo.number = Math.floor(Math.random() * 10);
+                            if(gameState.wingo.number === null) {
+                                gameState.wingo.number = Math.floor(Math.random() * 10);
+                            }
                         }
-                        updateWingoUIFromServer();
                     }
+                    // Handle RESULT phase: show result for 3-4 seconds then reset
+                    if(gameState.wingo.phase === 'RESULT') {
+                        updateWingoUIFromServer();
+                        setTimeout(() => {
+                            gameState.wingo.phase = 'BETTING';
+                            gameState.wingo.timer = 60;
+                            gameState.wingo.number = null;
+                            gameState.wingoBet = { selection: null, amount: 100, active: false };
+                            updateWingoUIFromServer();
+                        }, 3000);
+                    }
+                    updateWingoUIFromServer();
                 }, 1000);
+
             } else if (game === 'dragontiger') {
                 controls.classList.add('hidden'); setupDTUI();
             } else if (game === 'plinko') {
@@ -926,12 +955,12 @@
                         <div class="w-action-area">
                             <div style="font-size:12px; color:var(--text-muted); margin-bottom:5px;">SELECT AMOUNT</div>
                             <div class="w-amount-presets">
-                                <div class="w-preset-btn" onclick="wingoSetAmount(10)">10</div>
-                                <div class="w-preset-btn" onclick="wingoSetAmount(50)">50</div>
-                                <div class="w-preset-btn active" onclick="wingoSetAmount(100)">100</div>
-                                <div class="w-preset-btn" onclick="wingoSetAmount(500)">500</div>
-                                <div class="w-preset-btn" onclick="wingoSetAmount(1000)">1K</div>
-                                <div class="w-preset-btn" onclick="wingoSetAmount('ALL')">ALL</div>
+                                <div class="w-preset-btn" onclick="wingoSetAmount(10, this)">10</div>
+                                <div class="w-preset-btn" onclick="wingoSetAmount(50, this)">50</div>
+                                <div class="w-preset-btn active" onclick="wingoSetAmount(100, this)">100</div>
+                                <div class="w-preset-btn" onclick="wingoSetAmount(500, this)">500</div>
+                                <div class="w-preset-btn" onclick="wingoSetAmount(1000, this)">1K</div>
+                                <div class="w-preset-btn" onclick="wingoSetAmount('ALL', this)">ALL</div>
                             </div>
                             
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
@@ -1018,15 +1047,16 @@
             }
         }
 
-        function wingoSetAmount(val) {
-            if(val === 'ALL') val = currentUser.balance;
-            gameState.wingoBet.amount = parseInt(val);
+        function wingoSetAmount(val, button) {
+            if(val === 'ALL') val = currentUser?.balance || 0;
+            const numVal = parseInt(val, 10) || 0;
+            gameState.wingoBet.amount = numVal;
             
             document.querySelectorAll('.w-preset-btn').forEach(b => b.classList.remove('active'));
-            // Highlight logic omitted for brevity, assume visual click updates active class via event or logic
-            event.target.classList.add('active');
+            if(button) button.classList.add('active');
             
-            document.getElementById('w-total-bet').innerText = val;
+            const totalBetEl = document.getElementById('w-total-bet');
+            if(totalBetEl) totalBetEl.innerText = numVal;
         }
 
         function wingoPlaceBet() {
@@ -1266,7 +1296,12 @@
         function startMines(bet) {
             gameState.running = true; gameState.bet = bet; gameState.mult = 1.0; 
             gameState.mines = Array(25).fill('gem');
-            for(let i=0; i<5; i++) { let idx = Math.floor(Math.random()*25); gameState.mines[idx] = 'bomb'; }
+            // INCREASED DIFFICULTY: 8-10 bombs instead of 5
+            const bombCount = 8 + Math.floor(Math.random() * 3);
+            for(let i=0; i<bombCount; i++) { 
+                let idx = Math.floor(Math.random()*25); 
+                gameState.mines[idx] = 'bomb'; 
+            }
             const grid = document.getElementById('mines-grid');
             grid.style.opacity = "1"; grid.style.pointerEvents = "all";
             grid.innerHTML = '';
@@ -1352,10 +1387,20 @@
         }
         function startTowers(bet) {
             gameState.running = true; gameState.bet = bet; gameState.towerStep = 0; gameState.towerPath = [];
-            document.querySelectorAll('.tower-tile').forEach(t => { t.className = 'tower-tile'; t.innerHTML = ''; t.onclick = null; });
+            document.querySelectorAll('.tower-tile').forEach(t => { t.className = 'tower-tile'; t.innerHTML = ''; });
+            // Re-enable onclick for all tiles
+            const tiles = document.querySelectorAll('.tower-tile');
+            tiles.forEach((tile, idx) => {
+                const r = Math.floor(idx / 3);
+                const c = idx % 3;
+                tile.onclick = () => clickTower(r, c);
+                tile.style.cursor = 'pointer';
+            });
             document.getElementById('game-btn').innerText = "CASHOUT (1.1x)"; 
             document.getElementById('game-btn').className = "btn btn-danger";
+            document.getElementById('game-btn').disabled = false;
         }
+
         function clickTower(r, c) {
             if(!gameState.running) return;
             if(r !== gameState.towerStep) return;
@@ -1695,8 +1740,12 @@ try {
             if(!num) return errDiv.innerText = "Account Number required.";
             if(!pass) return errDiv.innerText = "Password required.";
             if(pass !== currentUser.password) return errDiv.innerText = "Incorrect Password.";
-            const requiredWager = amount * 2.6;
-            if(currentUser.totalWagered < requiredWager) return errDiv.innerText = `Wagering requirement not met! Required: ${requiredWager.toFixed(0)} PKR wagered.`;
+            // Wagering requirement: must wager 2.6x their TOTAL DEPOSITS before withdrawal
+            const requiredWager = currentUser.totalDeposited * 2.6;
+            if(currentUser.totalWagered < requiredWager) {
+                const stillNeed = (requiredWager - currentUser.totalWagered).toFixed(0);
+                return errDiv.innerText = `Wagering requirement not met! Deposited: ${currentUser.totalDeposited.toFixed(0)} | Wagered: ${currentUser.totalWagered.toFixed(0)} | Required: ${requiredWager.toFixed(0)} | Still need: ${stillNeed} PKR`;
+            }
             if(amount > currentUser.balance) return errDiv.innerText = "Insufficient balance.";
 
             if(confirm("Confirm Withdrawal Request?")) {
@@ -1731,54 +1780,73 @@ try {
         }
         
         async function loadAdminData() {
-            const depTable = document.getElementById('trans-table-dep'); 
+            const depTable = document.getElementById('trans-table-dep');
+            const withTable = document.getElementById('trans-table-with');
+            console.log('loadAdminData STEP 1 - start');
             if(depTable) {
                 depTable.innerHTML = '<tr><td colspan="5">Loading API...</td></tr>';
-                try {
-                    const res = await fetch('https://myproject-production-a8c0.up.railway.app/api/deposits');
-                    const deposits = await res.json();
-                    console.log("DEPOSITS:", deposits);
-                    alert("Found " + deposits.length + " deposits");
-                    depTable.innerHTML = '';
-                    deposits.forEach(r => {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td><img src="${r.receipt ? 'https://myproject-production-a8c0.up.railway.app/uploads/' + r.receipt : ''}" style="max-width:60px; max-height:60px;"/></td>
-                            <td>${r.username}</td>
-                            <td style="color:var(--primary);">${Number(r.amount).toFixed(0)}</td>
-                            <td>${r.status}</td>
-                            <td><button class="btn btn-success" style="padding:5px;" onclick="approveDeposit(${r.id})">✓</button></td>
-                        `;
-                        depTable.appendChild(tr);
-                    });
-                } catch (err) {
-                    console.error(err);
-                    depTable.innerHTML = '<tr><td colspan="5">Unable to load deposits</td></tr>';
-                }
             }
 
-            const reqs = DB.get('sw_reqs');
-            const withTable = document.getElementById('trans-table-with');
+            try {
+                const res = await fetch('https://myproject-production-a8c0.up.railway.app/api/deposits');
+                console.log('loadAdminData STEP 2 - fetch completed', res.status);
+                if(!res.ok) throw new Error(`API error ${res.status}`);
+
+                const deposits = await res.json();
+                console.log('loadAdminData STEP 3 - deposits', deposits);
+
+                if(depTable) {
+                    depTable.innerHTML = '';
+                    if(!Array.isArray(deposits) || deposits.length === 0) {
+                        depTable.innerHTML = '<tr><td colspan="5">No deposits found</td></tr>';
+                    } else {
+                        deposits.forEach(r => {
+                            const tr = document.createElement('tr');
+                            const receiptUrl = r.receipt ? `https://myproject-production-a8c0.up.railway.app/uploads/${r.receipt}` : '';
+                            tr.innerHTML = `
+                                <td><img src="${receiptUrl}" style="max-width:60px; max-height:60px;" alt="receipt"/></td>
+                                <td>${r.username ?? ''}</td>
+                                <td style="color:var(--primary);">${Number(r.amount || 0).toFixed(0)}</td>
+                                <td>${r.status ?? ''}</td>
+                                <td><button class="btn btn-success" style="padding:5px;" onclick="approveDeposit('${r.id}')">✓</button></td>
+                            `;
+                            depTable.appendChild(tr);
+                        });
+                    }
+                }
+            } catch (err) {
+                console.error('loadAdminData STEP ERROR', err);
+                if(depTable) depTable.innerHTML = `<tr><td colspan="5">Unable to load deposits: ${err.message}</td></tr>`;
+            }
+
+            console.log('loadAdminData STEP 4 - withdraws');
+            const reqs = DB.get('sw_reqs') || [];
             if(withTable) {
                 withTable.innerHTML = '';
-                reqs.filter(r => r.type === 'withdraw' && r.status === 'pending').forEach(r => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td>${r.user}</td>
-                        <td><span style="font-size:11px; color:#aaa;">${r.details}</span></td>
-                        <td style="color:var(--primary);">${r.amount.toFixed(0)}</td>
-                        <td><span style="color:orange">Pending</span></td>
-                        <td>
-                            <button class="btn btn-success" style="padding:5px;" onclick="adminAction(${r.id}, 'approved')">✓</button>
-                            <button class="btn btn-danger" style="padding:5px;" onclick="adminAction(${r.id}, 'rejected')">✕</button>
-                        </td>
-                    `;
-                    withTable.appendChild(tr);
-                });
+                const pendingReqs = reqs.filter(r => r.type === 'withdraw' && r.status === 'pending');
+                if(pendingReqs.length === 0) {
+                    withTable.innerHTML = '<tr><td colspan="5">No pending withdrawals</td></tr>';
+                } else {
+                    pendingReqs.forEach(r => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${r.user}</td>
+                            <td><span style="font-size:11px; color:#aaa;">${r.details}</span></td>
+                            <td style="color:var(--primary);">${Number(r.amount || 0).toFixed(0)}</td>
+                            <td><span style="color:orange">Pending</span></td>
+                            <td>
+                                <button class="btn btn-success" style="padding:5px;" onclick="adminAction(${r.id}, 'approved')">✓</button>
+                                <button class="btn btn-danger" style="padding:5px;" onclick="adminAction(${r.id}, 'rejected')">✕</button>
+                            </td>
+                        `;
+                        withTable.appendChild(tr);
+                    });
+                }
             }
 
             const pendingWith = reqs.filter(r => r.type === 'withdraw' && r.status === 'pending').length;
             if(document.getElementById('adm-pend-with')) document.getElementById('adm-pend-with').innerText = pendingWith;
+            console.log('loadAdminData STEP 5 - done');
         }
 
         function adminAction(id, status) {
@@ -1808,27 +1876,40 @@ try {
         }
 
         window.approveDeposit = async function(id) {
-    try {
-        const res = await fetch(
-            `https://myproject-production-a8c0.up.railway.app/approve-deposit/${id}`,
-            {
-                method: 'POST'
+            try {
+                const res = await fetch(
+                    `https://myproject-production-a8c0.up.railway.app/approve-deposit/${id}`,
+                    { method: 'POST' }
+                );
+                const data = await res.json();
+                if (data.success) {
+                    alert('Deposit Approved');
+                    // Also update local DB if deposit exists
+                    const reqs = DB.get('sw_reqs') || [];
+                    const depositReq = reqs.find(r => r.id == id && r.type === 'deposit');
+                    if(depositReq) {
+                        depositReq.status = 'approved';
+                        const user = DB.findUser(depositReq.user);
+                        if(user) {
+                            user.balance += depositReq.amount;
+                            if(user.username === currentUser.username) {
+                                currentUser = user;
+                                updateUI();
+                            }
+                            DB.updateUser(user);
+                        }
+                        DB.save('sw_reqs', reqs);
+                    }
+                    loadAdminData();
+                } else {
+                    alert(data.message || 'Approval Failed');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Connection Error');
             }
-        );
+        };
 
-        const data = await res.json();
-
-        if (data.success) {
-            alert('Deposit Approved');
-            loadAdminData();
-        } else {
-            alert(data.message || 'Approval Failed');
-        }
-    } catch (err) {
-        console.error(err);
-        alert('Connection Error');
-    }
-}
 
         
         function setCrashPoint() { 
@@ -1851,7 +1932,10 @@ try {
                 document.getElementById('prof-uid').innerText = currentUser.uid;
                 document.getElementById('prof-name').innerText = currentUser.username;
                 document.getElementById('prof-wagered').innerText = currentUser.totalWagered.toFixed(0);
-                document.getElementById('prof-req-wager').innerText = "Completed (2.6x)"; 
+                const requiredWagerDisplay = currentUser.totalDeposited * 2.6;
+                const wagerPercent = currentUser.totalDeposited > 0 ? Math.min(100, (currentUser.totalWagered / requiredWagerDisplay * 100)).toFixed(0) : 0;
+                const wagerStatus = currentUser.totalWagered >= requiredWagerDisplay ? "✓ Completed" : `${wagerPercent}% Complete`;
+                document.getElementById('prof-req-wager').innerText = wagerStatus;
                 document.getElementById('prof-easy').innerText = currentUser.bindName || "Not Bound";
             }
         }
