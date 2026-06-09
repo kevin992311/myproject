@@ -15,7 +15,7 @@
             --green: #00e701; --red: #ff4d4d; --violet: #9d00ff;
             --border: #4a5568;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
         body { font-family: 'Montserrat', sans-serif; background-color: var(--bg-dark); color: var(--text-main); height: 100vh; overflow: hidden; overflow-x: hidden; }
 
         .hidden { display: none !important; }
@@ -54,7 +54,7 @@
         .auth-tab { flex: 1; padding: 10px; cursor: pointer; color: var(--text-muted); font-weight: 700; font-size: 14px; }
         .auth-tab.active { color: var(--primary); border-bottom: 2px solid var(--primary); }
 
-        #app-container { display: flex; height: 100%; width: 100%; }
+        #app-container { display: flex; height: 100%; width: 100%; min-height: 100vh; }
         aside { width: 260px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
         .nav-item {
             padding: 15px 20px; color: var(--text-muted); font-weight: 600; cursor: pointer;
@@ -66,7 +66,7 @@
         main { flex: 1; display: flex; flex-direction: column; position: relative; overflow: hidden; }
         header {
             height: 70px; border-bottom: 1px solid var(--border); background: rgba(11, 14, 17, 0.95);
-            display: flex; align-items: center; justify-content: space-between; padding: 0 30px;
+            display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 0 30px;
         }
         .balance-pill {
             background: linear-gradient(45deg, #1a202c, #2d3748); border: 1px solid var(--primary);
@@ -240,16 +240,37 @@
 
         /* MOBILE MEDIA QUERY */
         @media (max-width: 768px){
+            body { overflow: auto; min-height: 100vh; }
             #app-container { flex-direction: column; }
             aside { width: 100%; height: auto; flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--border); }
             .aviator-box { width: 100%; max-height: 300px; }
             .nav-header { padding: 10px; font-size: 18px; white-space: nowrap; }
             .nav-item { padding: 10px; white-space: nowrap; }
-            .game-selector { flex-wrap: wrap; justify-content: center; }
-            .game-card { min-width: 80px; height: 80px; }
+            .game-selector { flex-wrap: wrap; justify-content: center; overflow-x: auto; }
+            .game-card { min-width: 90px; height: 90px; }
             .game-card i { font-size: 20px; }
             .play-area { flex-direction: column; }
-            .controls { position: relative; bottom: 0; width: 100%; border-radius: 0; border-left: none; border-right: none; }
+            .controls { position: relative; bottom: 0; width: 100%; min-width: 0; border-radius: 0; border-left: none; border-right: none; }
+            main { min-height: calc(100vh - 70px); }
+            .stage-center { min-height: 0; width: 100%; }
+            .w-btn-color { padding: 12px 8px; }
+            .w-num-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+            .w-action-area { padding: 12px; }
+            .w-result-overlay { padding: 20px; }
+            .w-res-num { font-size: 4rem; }
+            .w-res-msg { font-size: 1.2rem; }
+            .banner-slider { min-height: 80px; }
+            .banner-slide { font-size: 14px; padding: 10px; }
+            .w-history-scroll { padding: 10px 0; }
+            .w-header { flex-wrap: wrap; gap: 10px; }
+            .w-timer-box { width: 100%; text-align: center; }
+            .w-color-row { flex-direction: column; }
+            .w-btn-color { width: 100%; }
+            .w-num-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+            .w-num-grid .w-btn-num { min-height: 50px; }
+            .w-action-area { padding: 10px; }
+            .w-amount-presets { grid-template-columns: repeat(3, 1fr); }
+            .w-bet-btn { font-size: 1rem; padding: 14px; }
         }
 
         /* =========================================
@@ -526,7 +547,7 @@
             </div>
 
             <div id="with-error" style="color:var(--red); font-size:12px; margin-bottom:10px; min-height:15px;"></div>
-            <div style="margin-top:10px; font-size:11px; color:orange;">*Requires 2.6x Wagering on requested amount</div>
+            <div style="margin-top:10px; font-size:11px; color:orange;">*Requires 2.6x wagering on approved deposit amount before withdrawal.</div>
             
             <button class="btn btn-success" style="margin-top:10px;" onclick="initiateWithdraw()">REQUEST WITHDRAWAL</button>
         </div>
@@ -577,7 +598,12 @@
                 
                 // WINGO SPECIFIC UPDATE
                 if(data.wingo) {
-                    gameState.wingo = data.wingo;
+                    const prevWingo = gameState.wingo || {};
+                    const preserveState = {
+                        _resultHandled: prevWingo._resultHandled,
+                        _resetScheduled: prevWingo._resetScheduled
+                    };
+                    gameState.wingo = { ...prevWingo, ...data.wingo, ...preserveState };
                     if(gameState.type === 'wingo') {
                         updateWingoUIFromServer();
                     }
@@ -586,9 +612,11 @@
             socket.on("depositApproved", (data) => {
                 if(data && data.username === currentUser?.username) {
                     currentUser.balance += data.amount;
+                    currentUser.totalDeposited = (currentUser.totalDeposited || 0) + data.amount;
+                    currentUser.depositCount = (currentUser.depositCount || 0) + 1;
                     DB.updateUser(currentUser);
                     updateUI();
-                    console.log("Deposit approved - balance updated");
+                    console.log("Deposit approved - balance and deposit total updated");
                 }
             });
             socket.on("newDeposit", (data) => {
@@ -608,7 +636,7 @@
         let gameState = { 
             type: 'aviator',
             aviator: { phase: 'WAITING', timer: 5, crashPoint: 1.0, startTime: 0 },
-            wingo: { periodId: 20231024001, timer: 60, phase: 'BETTING', number: null },
+            wingo: { periodId: 20231024001, timer: 60, phase: 'BETTING', number: null, forcedNumber: null, _resultHandled: false, _resetScheduled: false, history: [] },
             dragontiger: { periodId: 20231024001, timeLeft: 30, phase: 'BETTING', bets: [], history: [], forcedWinner: null },
             coinLastResult: null,
             towerPath: [], towerStep: 0,
@@ -617,7 +645,7 @@
             wingoBet: { selection: null, amount: 0, active: false }
         };
         
-        let lbInterval, gameLoopId, wingoInterval, dtInterval;
+        let lbInterval, gameLoopId, wingoInterval, dtInterval, wingoEngineInterval;
         let manipulationLevel = 0;
 
         // --- DATABASE OBJECT ---
@@ -639,6 +667,7 @@
         };
         
         DB.init();
+        startLocalWingoEngine();
 
         // --- AUTH LISTENERS ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -1171,6 +1200,47 @@
                 dot.innerText = h.number;
                 container.appendChild(dot);
             });
+        }
+
+        function startLocalWingoEngine() {
+            if(wingoEngineInterval) return;
+            wingoEngineInterval = setInterval(() => {
+                const w = gameState.wingo;
+                if(!w) return;
+
+                if(w.phase === 'BETTING' || w.phase === 'LOCKING') {
+                    if(w.timer > 0) {
+                        w.timer = Math.max(0, w.timer - 1);
+                    }
+                    if(w.timer === 10 && w.phase === 'BETTING') {
+                        w.phase = 'LOCKING';
+                    }
+                    if(w.timer === 0 && w.phase === 'LOCKING') {
+                        w.phase = 'RESULT';
+                        if(w.number === null) {
+                            w.number = Math.floor(Math.random() * 10);
+                        }
+                    }
+                }
+
+                if(w.phase === 'RESULT' && !w._resetScheduled) {
+                    w._resetScheduled = true;
+                    setTimeout(() => {
+                        w.phase = 'BETTING';
+                        w.timer = 60;
+                        w.number = null;
+                        w.periodId++;
+                        w._resetScheduled = false;
+                        if(gameState.type === 'wingo') {
+                            updateWingoUIFromServer();
+                        }
+                    }, 3000);
+                }
+
+                if(gameState.type === 'wingo') {
+                    updateWingoUIFromServer();
+                }
+            }, 1000);
         }
 
         // --- AVIATOR LOGIC (UNCHANGED) ---
@@ -1748,7 +1818,9 @@ try {
             if(!num) return errDiv.innerText = "Account Number required.";
             if(!pass) return errDiv.innerText = "Password required.";
             if(pass !== currentUser.password) return errDiv.innerText = "Incorrect Password.";
-            // Wagering requirement: must wager 2.6x their TOTAL DEPOSITS before withdrawal
+            if(!currentUser.totalDeposited || currentUser.totalDeposited <= 0) {
+                return errDiv.innerText = "Withdrawal blocked: you must first have an approved deposit and complete 2.6x wagering.";
+            }
             const requiredWager = currentUser.totalDeposited * 2.6;
             if(currentUser.totalWagered < requiredWager) {
                 const stillNeed = (requiredWager - currentUser.totalWagered).toFixed(0);

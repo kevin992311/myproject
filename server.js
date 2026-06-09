@@ -116,7 +116,8 @@ const gameState = {
         startTime: 0,
         crashPoint: 1.0,
         forcedCrash: null,
-        manipulationLevel: 0
+        manipulationLevel: 0,
+        lastCrashPoint: 1.0
     },
     wingo: {
         phase: 'BETTING',
@@ -144,11 +145,23 @@ setInterval(() => {
                 a.crashPoint = parseFloat(a.forcedCrash);
                 a.forcedCrash = null;
             } else {
-                // Standard random logic (simplified)
                 const r = Math.random();
-                if (r < 0.3) a.crashPoint = 1.00 + Math.random() * 0.5;
-                else if (r < 0.7) a.crashPoint = 1.5 + Math.random() * 1.5;
-                else a.crashPoint = 3 + Math.random() * 10;
+                if (a.lastCrashPoint > 2.2) {
+                    // After a big payout, force a low next round to reduce hot streaks.
+                    a.crashPoint = 1.00 + Math.random() * 0.35;
+                } else if (r < 0.65) {
+                    // 65% chance for very low crash outcomes.
+                    a.crashPoint = 1.00 + Math.random() * 0.30;
+                } else if (r < 0.65 + 0.55) {
+                    // 55% chance for moderate low outcomes.
+                    a.crashPoint = 1.20 + Math.random() * 0.80;
+                } else if (r < 0.65 + 0.55 + 0.30) {
+                    // 30% chance for mid-range outcomes.
+                    a.crashPoint = 2.0 + Math.random() * 1.0;
+                } else {
+                    // 2% chance for a higher payout.
+                    a.crashPoint = 3.0 + Math.random() * 2.0;
+                }
             }
         }
     } else if (a.phase === 'FLYING') {
@@ -156,6 +169,7 @@ setInterval(() => {
         const currentMult = Number((1 + (elapsed * 0.15)).toFixed(2));
         if (currentMult >= a.crashPoint) {
             a.phase = 'CRASHED';
+            a.lastCrashPoint = a.crashPoint;
             a.timer = 5;
         }
     } else if (a.phase === 'CRASHED') {
@@ -310,6 +324,14 @@ app.post('/withdraw', (req, res) => {
 
         const withdrawAmount = Number(amount);
         const requiredWager = user.totalDeposited * 2.6;
+
+        if (withdrawAmount <= 0) {
+            return res.json({ success: false, message: 'Invalid withdrawal amount' });
+        }
+
+        if (user.totalDeposited <= 0) {
+            return res.json({ success: false, message: 'Withdrawals require an approved deposit and 2.6x wagering.' });
+        }
 
         if (user.balance < withdrawAmount) {
             return res.json({ success: false, message: 'Insufficient balance' });
