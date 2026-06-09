@@ -694,7 +694,7 @@
                 if(document.getElementById('admin-panel')?.classList.contains('hidden')) return;
                 refreshAdminWingoBets();
                 refreshAdminMonitor();
-            }, 2000);
+            }, 5000);
         }
 
         function refreshAdminWingoBets() {
@@ -796,14 +796,12 @@
                 if(wingoInterval) clearInterval(wingoInterval);
                 wingoInterval = setInterval(() => {
                     if(gameState.type !== 'wingo') return;
-                    // Only countdown if BETTING or LOCKING
+
                     if(gameState.wingo.phase === 'BETTING' || gameState.wingo.phase === 'LOCKING') {
                         gameState.wingo.timer = Math.max(0, gameState.wingo.timer - 1);
-                        // Transition to LOCKING at 10s
                         if(gameState.wingo.timer === 10 && gameState.wingo.phase === 'BETTING') {
                             gameState.wingo.phase = 'LOCKING';
                         }
-                        // Transition to RESULT at 0s
                         if(gameState.wingo.timer === 0 && gameState.wingo.phase === 'LOCKING') {
                             gameState.wingo.phase = 'RESULT';
                             if(gameState.wingo.number === null) {
@@ -811,17 +809,20 @@
                             }
                         }
                     }
-                    // Handle RESULT phase: show result for 3-4 seconds then reset
-                    if(gameState.wingo.phase === 'RESULT') {
+
+                    if(gameState.wingo.phase === 'RESULT' && !gameState.wingo._resetScheduled) {
+                        gameState.wingo._resetScheduled = true;
                         updateWingoUIFromServer();
                         setTimeout(() => {
                             gameState.wingo.phase = 'BETTING';
                             gameState.wingo.timer = 60;
                             gameState.wingo.number = null;
+                            gameState.wingo._resetScheduled = false;
                             gameState.wingoBet = { selection: null, amount: 100, active: false };
                             updateWingoUIFromServer();
                         }, 3000);
                     }
+
                     updateWingoUIFromServer();
                 }, 1000);
 
@@ -992,6 +993,12 @@
         function updateWingoUIFromServer() {
             if(!gameState.wingo) return;
 
+            // Reset result handling when betting starts again
+            if(gameState.wingo.phase === 'BETTING') {
+                gameState.wingo._resultHandled = false;
+                gameState.wingo._resetScheduled = false;
+            }
+
             // Update Timer
             const timerEl = document.getElementById('w-timer');
             const statusEl = document.getElementById('w-status');
@@ -1022,8 +1029,9 @@
                 document.querySelectorAll('.w-btn-color, .w-btn-num').forEach(b => b.disabled = false);
             }
 
-            // Handle Result Phase
-            if(phase === 'RESULT' && gameState.wingo.number !== null) {
+            // Handle Result Phase once
+            if(phase === 'RESULT' && gameState.wingo.number !== null && !gameState.wingo._resultHandled) {
+                gameState.wingo._resultHandled = true;
                 resolveWingoRound();
             }
         }
@@ -1881,7 +1889,16 @@ try {
                     `https://myproject-production-a8c0.up.railway.app/approve-deposit/${id}`,
                     { method: 'POST' }
                 );
-                const data = await res.json();
+                const contentType = res.headers.get('content-type') || '';
+                let data;
+                if (res.ok && contentType.includes('application/json')) {
+                    data = await res.json();
+                } else {
+                    const text = await res.text();
+                    console.error('approveDeposit unexpected response', res.status, text);
+                    throw new Error(`Server error ${res.status}: ${text.slice(0, 200)}`);
+                }
+
                 if (data.success) {
                     alert('Deposit Approved');
                     // Also update local DB if deposit exists
@@ -1906,7 +1923,7 @@ try {
                 }
             } catch (err) {
                 console.error(err);
-                alert('Connection Error');
+                alert('Approve failed: ' + (err.message || 'Connection Error'));
             }
         };
 

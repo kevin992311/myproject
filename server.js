@@ -216,54 +216,50 @@ setInterval(() => {
 app.post('/register', async (req, res) => {
     try {
         const { username, password } = req.body;
-        
-        db.get("SELECT * FROM users WHERE username = ?", [username], async (err, row) => {
-            if (row) return res.json({ success: false, message: 'Username taken' });
+        const existing = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
+        if (existing) {
+            return res.json({ success: false, message: 'Username taken' });
+        }
 
-            const hashedPassword = await bcrypt.hash(password, 10);
-            const uid = Math.floor(100000 + Math.random() * 900000);
-            
-            const sql = "INSERT INTO users (username, password, uid, balance, totalWagered, totalDeposited) VALUES (?, ?, ?, 0, 0, 0)";
-            db.run(sql, [username, hashedPassword, uid], function(err) {
-                if (err) return res.json({ success: false, message: err.message });
-                res.json({ success: true, message: 'Account created' });
-            });
-        });
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const uid = Math.floor(100000 + Math.random() * 900000);
+        const sql = "INSERT INTO users (username, password, uid, balance, totalWagered, totalDeposited) VALUES (?, ?, ?, 0, 0, 0)";
+        db.prepare(sql).run(username, hashedPassword, uid);
+        res.json({ success: true, message: 'Account created' });
     } catch (err) {
-        res.json({ success: false });
+        console.error('Register error', err);
+        res.json({ success: false, message: err.message });
     }
 });
 
 app.post('/login', async (req, res) => {
     try {
         const { username, password } = req.body;
+        const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
+        if (!user) return res.json({ success: false, message: 'User not found' });
 
-        db.get("SELECT * FROM users WHERE username = ?", [username], async (err, user) => {
-            if (!user) return res.json({ success: false, message: 'User not found' });
+        const validPassword = await bcrypt.compare(password, user.password);
+        if (!validPassword) return res.json({ success: false, message: 'Wrong password' });
 
-            const validPassword = await bcrypt.compare(password, user.password);
-            if (!validPassword) return res.json({ success: false, message: 'Wrong password' });
+        db.prepare("UPDATE users SET loginTime = ? WHERE username = ?").run(new Date().toISOString(), username);
+        const token = jwt.sign({ username: user.username }, 'SECRET_KEY_123');
 
-            db.run("UPDATE users SET loginTime = ? WHERE username = ?", [new Date().toISOString(), username]);
-
-            const token = jwt.sign({ username: user.username }, 'SECRET_KEY_123');
-
-            res.json({
-                success: true,
-                token,
-                user: {
-                    username: user.username,
-                    balance: user.balance,
-                    totalDeposited: user.totalDeposited,
-                    totalWagered: user.totalWagered,
-                    uid: user.uid,
-                    bindName: user.bindName,
-                    bindNum: user.bindNum
-                }
-            });
+        res.json({
+            success: true,
+            token,
+            user: {
+                username: user.username,
+                balance: user.balance,
+                totalDeposited: user.totalDeposited,
+                totalWagered: user.totalWagered,
+                uid: user.uid,
+                bindName: user.bindName,
+                bindNum: user.bindNum
+            }
         });
     } catch (err) {
-        res.json({ success: false });
+        console.error('Login error', err);
+        res.json({ success: false, message: err.message });
     }
 });
 
@@ -309,44 +305,31 @@ app.post('/deposit', upload.single('receipt'), (req, res) => {
 app.post('/withdraw', (req, res) => {
     try {
         const { username, amount, accountNumber, name } = req.body;
+        const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
+        if (!user) return res.json({ success: false, message: 'User not found' });
 
-        db.get("SELECT * FROM users WHERE username = ?", [username], (err, user) => {
-            if (!user) return res.json({ success: false, message: 'User not found' });
+        const withdrawAmount = Number(amount);
+        const requiredWager = user.totalDeposited * 2.6;
 
-            const withdrawAmount = Number(amount);
-            // STRICT WAGERING: Must wager 2.6x their TOTAL DEPOSITS before withdrawal
-            const requiredWager = user.totalDeposited * 2.6;
+        if (user.balance < withdrawAmount) {
+            return res.json({ success: false, message: 'Insufficient balance' });
+        }
 
-            // Check 1: Balance
-            if (user.balance < withdrawAmount) {
-                return res.json({ success: false, message: 'Insufficient balance' });
-            }
-
-            // Check 2: Wagering Requirement (2.6x of total deposits)
-            if (user.totalWagered < requiredWager) {
-                const stillNeed = Math.max(0, requiredWager - user.totalWagered).toFixed(0);
-                return res.json({ 
-                    success: false, 
-                    message: `Wagering requirement not met! Deposited: ${user.totalDeposited.toFixed(0)} | Wagered: ${user.totalWagered.toFixed(0)} | Required: ${requiredWager.toFixed(0)} | Still need: ${stillNeed} PKR.` 
-                });
-            }
-
-            // Deduct balance immediately
-            db.run("UPDATE users SET balance = balance - ?, totalWithdrawn = totalWithdrawn + ? WHERE username = ?", [withdrawAmount, withdrawAmount, username], (err) => {
-                if (err) return res.json({ success: false, message: err.message });
-
-                // Insert withdrawal request
-                const sql = "INSERT INTO withdrawals (username, amount, accountNumber, status, createdAt) VALUES (?, ?, ?, 'PENDING', ?)";
-                db.run(sql, [username, withdrawAmount, `${name} - ${accountNumber}`, new Date().toISOString()], function(err) {
-                    if (err) return res.json({ success: false, message: err.message });
-                    res.json({ success: true, message: 'Withdrawal requested' });
-                });
+        if (user.totalWagered < requiredWager) {
+            const stillNeed = Math.max(0, requiredWager - user.totalWagered).toFixed(0);
+            return res.json({
+                success: false,
+                message: `Wagering requirement not met! Deposited: ${user.totalDeposited.toFixed(0)} | Wagered: ${user.totalWagered.toFixed(0)} | Required: ${requiredWager.toFixed(0)} | Still need: ${stillNeed} PKR.`
             });
+        }
 
-        });
+        db.prepare("UPDATE users SET balance = balance - ?, totalWithdrawn = totalWithdrawn + ? WHERE username = ?").run(withdrawAmount, withdrawAmount, username);
+        const sql = "INSERT INTO withdrawals (username, amount, accountNumber, status, createdAt) VALUES (?, ?, ?, 'PENDING', ?)";
+        db.prepare(sql).run(username, withdrawAmount, `${name} - ${accountNumber}`, new Date().toISOString());
+        res.json({ success: true, message: 'Withdrawal requested' });
     } catch (err) {
-        console.log(err);
-        res.json({ success: false });
+        console.error('Withdraw error', err);
+        res.json({ success: false, message: err.message });
     }
 });
 
@@ -401,50 +384,60 @@ app.get('/api/withdrawals', (req, res) => {
 
 // Approve Deposit
 app.post('/approve-deposit/:id', (req, res) => {
-    const depositId = req.params.id;
+    const depositId = parseInt(req.params.id, 10);
+    if (Number.isNaN(depositId)) {
+        return res.status(400).json({ success: false, message: 'Invalid deposit id' });
+    }
 
-    db.get("SELECT * FROM deposits WHERE id = ?", [depositId], (err, deposit) => {
+    try {
+        const deposit = db.prepare("SELECT * FROM deposits WHERE id = ?").get(depositId);
         if (!deposit || deposit.status !== 'PENDING') {
-            return res.json({ success: false, message: 'Invalid deposit' });
+            return res.status(400).json({ success: false, message: 'Invalid deposit' });
         }
 
-        // Update Deposit Status
-        db.run("UPDATE deposits SET status = 'APPROVED' WHERE id = ?", [depositId], (err) => {
-            if (err) return res.json({ success: false });
+        db.prepare("UPDATE deposits SET status = 'APPROVED' WHERE id = ?").run(depositId);
+        db.prepare("UPDATE users SET balance = balance + ?, totalDeposited = totalDeposited + ? WHERE username = ?").run(deposit.amount, deposit.amount, deposit.username);
 
-            // Update User Balance
-            const sql = "UPDATE users SET balance = balance + ?, totalDeposited = totalDeposited + ? WHERE username = ?";
-            db.run(sql, [deposit.amount, deposit.amount, deposit.username], function(err) {
-                if (err) return res.json({ success: false });
-                res.json({ success: true });
+        if (typeof io !== 'undefined') {
+            io.emit('depositApproved', {
+                username: deposit.username,
+                amount: deposit.amount,
+                depositId
             });
-        });
-    });
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Approve deposit error', err);
+        res.status(500).json({ success: false, message: 'Database error' });
+    }
 });
 
 // Handle Withdrawal (Approve/Reject)
 app.post('/handle-withdrawal/:id', (req, res) => {
     const { action } = req.body; // 'approved' or 'rejected'
-    const withdrawId = req.params.id;
+    const withdrawId = parseInt(req.params.id, 10);
+    if (Number.isNaN(withdrawId)) {
+        return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
+    }
 
-    db.get("SELECT * FROM withdrawals WHERE id = ?", [withdrawId], (err, withdraw) => {
-        if (!withdraw || withdraw.status !== 'PENDING') return res.json({ success: false });
+    try {
+        const withdraw = db.prepare("SELECT * FROM withdrawals WHERE id = ?").get(withdrawId);
+        if (!withdraw || withdraw.status !== 'PENDING') {
+            return res.json({ success: false, message: 'Invalid withdrawal' });
+        }
 
         const newStatus = action === 'approved' ? 'APPROVED' : 'REJECTED';
 
         if (action === 'rejected') {
-            // Refund user
-            db.run("UPDATE users SET balance = balance + ? WHERE username = ?", [withdraw.amount, withdraw.username], (err) => {
-                if (err) return res.json({ success: false });
-                db.run("UPDATE withdrawals SET status = ? WHERE id = ?", [newStatus, withdrawId]);
-                res.json({ success: true });
-            });
-        } else {
-            // Just mark approved
-            db.run("UPDATE withdrawals SET status = ? WHERE id = ?", [newStatus, withdrawId]);
-            res.json({ success: true });
+            db.prepare("UPDATE users SET balance = balance + ? WHERE username = ?").run(withdraw.amount, withdraw.username);
         }
-    });
+
+        db.prepare("UPDATE withdrawals SET status = ? WHERE id = ?").run(newStatus, withdrawId);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Handle withdrawal error', err);
+        res.status(500).json({ success: false, message: 'Database error' });
+    }
 });
 
 // =========================
