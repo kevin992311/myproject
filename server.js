@@ -145,22 +145,32 @@ setInterval(() => {
                 a.crashPoint = parseFloat(a.forcedCrash);
                 a.forcedCrash = null;
             } else {
-                const r = Math.random();
+                // Use relative weights provided by the operator and normalize via a summed weight roll.
+                // Requested weights: 45 (very low), 55 (moderate low), 33 (mid-range), 2 (high)
+                const wVeryLow = 45;
+                const wModerate = 55;
+                const wMid = 33;
+                const wHigh = 2;
+                const totalW = wVeryLow + wModerate + wMid + wHigh; // 135
+
+                // If previous round was a large payout, bias next round very low to break streaks.
                 if (a.lastCrashPoint > 2.2) {
-                    // After a big payout, force a low next round to reduce hot streaks.
                     a.crashPoint = 1.00 + Math.random() * 0.35;
-                } else if (r < 0.65) {
-                    // 65% chance for very low crash outcomes.
-                    a.crashPoint = 1.00 + Math.random() * 0.30;
-                } else if (r < 0.65 + 0.55) {
-                    // 55% chance for moderate low outcomes.
-                    a.crashPoint = 1.20 + Math.random() * 0.80;
-                } else if (r < 0.65 + 0.55 + 0.30) {
-                    // 30% chance for mid-range outcomes.
-                    a.crashPoint = 2.0 + Math.random() * 1.0;
                 } else {
-                    // 2% chance for a higher payout.
-                    a.crashPoint = 3.0 + Math.random() * 2.0;
+                    const r = Math.random() * totalW; // 0 .. totalW
+                    if (r < wVeryLow) {
+                        // Very low outcome
+                        a.crashPoint = 1.00 + Math.random() * 0.30; // ~1.00 - 1.30
+                    } else if (r < wVeryLow + wModerate) {
+                        // Moderate low outcome
+                        a.crashPoint = 1.20 + Math.random() * 0.80; // ~1.20 - 2.00
+                    } else if (r < wVeryLow + wModerate + wMid) {
+                        // Mid-range outcome
+                        a.crashPoint = 2.00 + Math.random() * 1.00; // ~2.00 - 3.00
+                    } else {
+                        // High outcome (rare)
+                        a.crashPoint = 3.00 + Math.random() * 2.00; // ~3.00 - 5.00
+                    }
                 }
             }
         }
