@@ -562,6 +562,17 @@
             <div class="profile-field"><span style="color:var(--text-muted);">Total Wagered</span><span style="color:white;" id="prof-wagered">0</span></div>
             <div class="profile-field"><span style="color:var(--text-muted);">Req. for Withdraw</span><span style="color:orange;" id="prof-req-wager">0</span></div>
             <div class="profile-field"><span style="color:var(--text-muted);">Easypaisa</span><span style="color:white;" id="prof-easy">Not Bound</span></div>
+            <h4 style="margin-top:20px; color:var(--primary);">TRANSACTION HISTORY</h4>
+            <div style="margin-top:10px; max-height:240px; overflow-y:auto;">
+                <div style="margin-bottom:12px; font-weight:700; color:var(--text-muted);">Deposit Requests</div>
+                <div class="table-container" style="max-height:120px; overflow-y:auto; margin-bottom:12px;">
+                    <table style="width:100%; font-size:12px;"><thead><tr><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody id="prof-deposit-history"></tbody></table>
+                </div>
+                <div style="margin-bottom:12px; font-weight:700; color:var(--text-muted);">Withdrawal Requests</div>
+                <div class="table-container" style="max-height:120px; overflow-y:auto;">
+                    <table style="width:100%; font-size:12px;"><thead><tr><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody id="prof-withdraw-history"></tbody></table>
+                </div>
+            </div>
             <h4 style="margin-top:20px; color:var(--primary);">YOUR INVITE LINK</h4>
             <div class="invite-box" id="prof-link">...</div>
         </div>
@@ -616,6 +627,7 @@
                     currentUser.depositCount = (currentUser.depositCount || 0) + 1;
                     DB.updateUser(currentUser);
                     updateUI();
+                    updateLocalDepositStatus(currentUser.username, data.amount);
                     console.log("Deposit approved - balance and deposit total updated");
                 }
             });
@@ -822,39 +834,6 @@
                 controls.classList.add('hidden'); 
                 setupWingoUI();
                 updateWingoUIFromServer();
-                if(wingoInterval) clearInterval(wingoInterval);
-                wingoInterval = setInterval(() => {
-                    if(gameState.type !== 'wingo') return;
-
-                    if(gameState.wingo.phase === 'BETTING' || gameState.wingo.phase === 'LOCKING') {
-                        gameState.wingo.timer = Math.max(0, gameState.wingo.timer - 1);
-                        if(gameState.wingo.timer === 10 && gameState.wingo.phase === 'BETTING') {
-                            gameState.wingo.phase = 'LOCKING';
-                        }
-                        if(gameState.wingo.timer === 0 && gameState.wingo.phase === 'LOCKING') {
-                            gameState.wingo.phase = 'RESULT';
-                            if(gameState.wingo.number === null) {
-                                gameState.wingo.number = Math.floor(Math.random() * 10);
-                            }
-                        }
-                    }
-
-                    if(gameState.wingo.phase === 'RESULT' && !gameState.wingo._resetScheduled) {
-                        gameState.wingo._resetScheduled = true;
-                        updateWingoUIFromServer();
-                        setTimeout(() => {
-                            gameState.wingo.phase = 'BETTING';
-                            gameState.wingo.timer = 60;
-                            gameState.wingo.number = null;
-                            gameState.wingo._resetScheduled = false;
-                            gameState.wingoBet = { selection: null, amount: 100, active: false };
-                            updateWingoUIFromServer();
-                        }, 3000);
-                    }
-
-                    updateWingoUIFromServer();
-                }, 1000);
-
             } else if (game === 'dragontiger') {
                 controls.classList.add('hidden'); setupDTUI();
             } else if (game === 'plinko') {
@@ -1785,6 +1764,17 @@ try {
 
                 if(data.success) {
                     closeModal('deposit-modal');
+                    const reqs = DB.get('sw_reqs') || [];
+                    reqs.push({
+                        id: Date.now(),
+                        type: 'deposit',
+                        user: currentUser.username,
+                        amount,
+                        status: 'pending',
+                        createdAt: new Date().toISOString()
+                    });
+                    DB.save('sw_reqs', reqs);
+                    renderUserTransactionHistory();
                     showCustomPopup('info', 'SUCCESS', '0', 'Deposit submitted for approval');
                 } else {
                     showCustomPopup('info', 'FAILED', '0', data.message || 'Server rejected request');
@@ -1833,16 +1823,18 @@ try {
                 DB.updateUser(currentUser);
                 updateUI();
 
-                const reqs = DB.get('sw_reqs');
+                const reqs = DB.get('sw_reqs') || [];
                 reqs.push({
                     id: Date.now(),
                     type: 'withdraw',
                     user: currentUser.username,
                     amount: amount,
                     details: `${name} - ${num}`,
-                    status: 'pending'
+                    status: 'pending',
+                    createdAt: new Date().toISOString()
                 });
                 DB.save('sw_reqs', reqs);
+                renderUserTransactionHistory();
                 
                 closeModal('withdraw-modal');
                 alert("Withdrawal Request Submitted Successfully!");
@@ -2026,6 +2018,44 @@ try {
                 const wagerStatus = currentUser.totalWagered >= requiredWagerDisplay ? "✓ Completed" : `${wagerPercent}% Complete`;
                 document.getElementById('prof-req-wager').innerText = wagerStatus;
                 document.getElementById('prof-easy').innerText = currentUser.bindName || "Not Bound";
+            }
+            renderUserTransactionHistory();
+        }
+        function renderUserTransactionHistory() {
+            const depositBody = document.getElementById('prof-deposit-history');
+            const withdrawBody = document.getElementById('prof-withdraw-history');
+            if(!currentUser) return;
+            const reqs = DB.get('sw_reqs') || [];
+            const userReqs = reqs.filter(r => r.user === currentUser.username).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            if(depositBody) {
+                const deposits = userReqs.filter(r => r.type === 'deposit');
+                depositBody.innerHTML = deposits.length ? deposits.map(r => `
+                    <tr>
+                        <td>${r.amount.toFixed ? r.amount.toFixed(0) : r.amount}</td>
+                        <td>${r.status.toUpperCase()}</td>
+                        <td>${new Date(r.createdAt).toLocaleString()}</td>
+                    </tr>
+                `).join('') : '<tr><td colspan="3" style="padding:10px; text-align:center; color:#999;">No deposit history</td></tr>';
+            }
+            if(withdrawBody) {
+                const withdraws = userReqs.filter(r => r.type === 'withdraw');
+                withdrawBody.innerHTML = withdraws.length ? withdraws.map(r => `
+                    <tr>
+                        <td>${r.amount.toFixed ? r.amount.toFixed(0) : r.amount}</td>
+                        <td>${r.status.toUpperCase()}</td>
+                        <td>${new Date(r.createdAt).toLocaleString()}</td>
+                    </tr>
+                `).join('') : '<tr><td colspan="3" style="padding:10px; text-align:center; color:#999;">No withdrawal history</td></tr>';
+            }
+        }
+        function updateLocalDepositStatus(username, amount) {
+            const reqs = DB.get('sw_reqs') || [];
+            const index = reqs.findIndex(r => r.type === 'deposit' && r.user === username && r.status === 'pending' && Number(r.amount) === Number(amount));
+            if(index !== -1) {
+                reqs[index].status = 'approved';
+                reqs[index].updatedAt = new Date().toISOString();
+                DB.save('sw_reqs', reqs);
+                renderUserTransactionHistory();
             }
         }
         function searchUser() { alert("User search logic."); }
