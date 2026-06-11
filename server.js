@@ -128,6 +128,68 @@ const gameState = {
     }
 };
 
+const liveState = {
+    activePlayers: new Map(),
+    recentEvents: [],
+    wingoBets: new Map(),
+    wingoHistory: []
+};
+
+function pushLiveEvent(event) {
+    liveState.recentEvents.unshift({
+        ...event,
+        at: new Date().toISOString()
+    });
+    if (liveState.recentEvents.length > 80) liveState.recentEvents.pop();
+}
+
+function getWingoBetStats(periodId) {
+    const bets = liveState.wingoBets.get(periodId) || [];
+    const totals = {
+        red: 0,
+        green: 0,
+        violet: 0,
+        numbers: Array(10).fill(0),
+        total: 0,
+        count: bets.length
+    };
+
+    bets.forEach((bet) => {
+        const amount = Number(bet.amount || 0);
+        totals.total += amount;
+        if (typeof bet.selection === 'number') {
+            totals.numbers[bet.selection] += amount;
+        } else if (totals[bet.selection] !== undefined) {
+            totals[bet.selection] += amount;
+        }
+    });
+
+    return totals;
+}
+
+function getAdminLivePayload() {
+    const now = Date.now();
+    for (const [id, player] of liveState.activePlayers.entries()) {
+        if (now - player.lastSeen > 45000) liveState.activePlayers.delete(id);
+    }
+
+    return {
+        activePlayers: [...liveState.activePlayers.values()],
+        recentEvents: liveState.recentEvents,
+        wingo: {
+            periodId: gameState.wingo.periodId,
+            timer: gameState.wingo.timer,
+            phase: gameState.wingo.phase,
+            betStats: getWingoBetStats(gameState.wingo.periodId),
+            history: liveState.wingoHistory
+        }
+    };
+}
+
+function emitAdminLive() {
+    io.emit('adminLive', getAdminLivePayload());
+}
+
 // =========================
 // AVIATOR LOOP
 // =========================
@@ -190,48 +252,123 @@ setInterval(() => {
         }
     }
 
-    // Emit state update to frontend
+    // Emit Aviator state update to frontend
     io.emit('stateUpdate', {
         aviator: {
             phase: a.phase,
             timer: a.timer,
             startTime: a.startTime,
             crashPoint: a.crashPoint
-        },
-        wingo: gameState.wingo
+        }
     });
 
 }, 100);
 
 // =========================
-// WINGO LOOP
+// WINGO LOOP (FIXED - 24/7, serial period IDs, no skipping)
 // =========================
+// Fixed epoch: all clients derive the same periodId from real clock time.
+// Period = 60 seconds. PeriodId = number of 60s intervals since epoch.
+const WINGO_EPOCH = 1700000000; // Unix seconds fixed reference point
+const WINGO_PERIOD_DURATION = 60; // seconds per period
+const WINGO_RESULT_DURATION = 5; // seconds to show result at period boundary
+
+function getCurrentWingoPeriodId() {
+    const nowSec = Math.floor(Date.now() / 1000);
+    return Math.floor((nowSec - WINGO_EPOCH) / WINGO_PERIOD_DURATION);
+}
+
+function getWingoElapsedFromClock() {
+    const nowSec = Math.floor(Date.now() / 1000);
+    return (nowSec - WINGO_EPOCH) % WINGO_PERIOD_DURATION;
+}
+
+function getWingoTimerFromClock() {
+    const elapsed = getWingoElapsedFromClock();
+    if (elapsed < WINGO_RESULT_DURATION) return 0;
+    return WINGO_PERIOD_DURATION - elapsed;
+}
+
+function getWingoPhaseFromClock() {
+    const elapsed = getWingoElapsedFromClock();
+    if (elapsed < WINGO_RESULT_DURATION) return 'RESULT';
+    return getWingoTimerFromClock() > 10 ? 'BETTING' : 'LOCKING';
+}
+
+function pickWingoNumber(w) {
+    if (w.forcedNumber !== null && !isNaN(parseInt(w.forcedNumber, 10))) {
+        const num = parseInt(w.forcedNumber, 10);
+        w.forcedNumber = null;
+        return num;
+    }
+    return Math.floor(Math.random() * 10);
+}
+
+// Initialize from clock on startup
+gameState.wingo.periodId = getCurrentWingoPeriodId();
+gameState.wingo.timer = getWingoTimerFromClock();
+gameState.wingo.phase = getWingoPhaseFromClock();
+gameState.wingo.number = gameState.wingo.phase === 'RESULT' ? pickWingoNumber(gameState.wingo) : null;
+gameState.wingo.forcedNumber = null;
+
+let _wingoLastPeriod = gameState.wingo.periodId;
+let _wingoResultSent = gameState.wingo.phase === 'RESULT';
 
 setInterval(() => {
     const w = gameState.wingo;
+    const nowPeriodId = getCurrentWingoPeriodId();
+    const nowTimer = getWingoTimerFromClock();
+    const nowPhase = getWingoPhaseFromClock();
 
-    if (w.phase === 'BETTING') {
-        w.timer--;
-        if (w.timer <= 10) w.phase = 'LOCKING'; // Lock at 10s as per frontend
-        
-        if (w.timer <= 0) {
-            w.phase = 'RESULT';
-            if (w.forcedNumber !== null) {
-                w.number = w.forcedNumber;
-                w.forcedNumber = null;
-            } else {
-                w.number = Math.floor(Math.random() * 10);
-            }
-
-            setTimeout(() => {
-                w.phase = 'BETTING';
-                w.timer = 60;
-                w.number = null;
-                w.periodId++; // Increment period ID
-            }, 5000);
-        }
+    // Detect period rollover.
+    if (nowPeriodId !== _wingoLastPeriod) {
+        _wingoLastPeriod = nowPeriodId;
+        _wingoResultSent = false;
+        w.number = null;
     }
-}, 1000);
+
+    w.periodId = nowPeriodId;
+    w.timer = nowTimer;
+    w.phase = nowPhase;
+
+    if (nowPhase === 'RESULT' && !_wingoResultSent) {
+        _wingoResultSent = true;
+        w.number = pickWingoNumber(w);
+        liveState.wingoHistory.unshift({
+            periodId: w.periodId,
+            number: w.number,
+            createdAt: new Date().toISOString()
+        });
+        if (liveState.wingoHistory.length > 100) liveState.wingoHistory.pop();
+        pushLiveEvent({
+            type: 'wingo_result',
+            game: 'wingo',
+            periodId: w.periodId,
+            result: w.number
+        });
+    } else if (nowPhase !== 'RESULT') {
+        w.number = null;
+    }
+
+    // Emit to all clients.
+    io.emit('stateUpdate', {
+        aviator: {
+            phase: gameState.aviator.phase,
+            timer: gameState.aviator.timer,
+            startTime: gameState.aviator.startTime,
+            crashPoint: gameState.aviator.crashPoint
+        },
+        wingo: {
+            phase: w.phase,
+            timer: w.timer,
+            number: w.phase === 'RESULT' ? w.number : null,
+            periodId: w.periodId,
+            history: liveState.wingoHistory,
+            betStats: getWingoBetStats(w.periodId)
+        }
+    });
+    emitAdminLive();
+}, 500);
 
 // =========================
 // AUTH ROUTES
@@ -479,6 +616,7 @@ app.post('/handle-withdrawal/:id', (req, res) => {
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
     socket.emit('stateUpdate', gameState);
+    socket.emit('adminLive', getAdminLivePayload());
 
     // Admin: Set Crash Point
     socket.on('updateAviatorCrash', (val) => {
@@ -493,10 +631,77 @@ io.on('connection', (socket) => {
 
     // Admin: Set Wingo Number
     socket.on('updateWingoNumber', (val) => {
-        gameState.wingo.forcedNumber = val;
+        const num = parseInt(val, 10);
+        if (!isNaN(num) && num >= 0 && num <= 9) {
+            gameState.wingo.forcedNumber = num;
+            console.log('Admin forced wingo number:', num);
+        }
+    });
+
+    socket.on('playerActivity', (data = {}) => {
+        const player = {
+            socketId: socket.id,
+            username: String(data.username || 'Guest'),
+            uid: data.uid || '',
+            game: data.game || 'unknown',
+            balance: Number(data.balance || 0),
+            lastWin: Number(data.lastWin || 0),
+            location: data.location || 'Unknown',
+            lastSeen: Date.now()
+        };
+        liveState.activePlayers.set(socket.id, player);
+        emitAdminLive();
+    });
+
+    socket.on('wingoBetPlaced', (bet = {}) => {
+        const periodId = Number(bet.periodId || gameState.wingo.periodId);
+        const amount = Number(bet.amount || 0);
+        const selection = typeof bet.selection === 'number' ? bet.selection : String(bet.selection || '');
+
+        if (!liveState.wingoBets.has(periodId)) liveState.wingoBets.set(periodId, []);
+        liveState.wingoBets.get(periodId).push({
+            username: String(bet.username || 'Guest'),
+            uid: bet.uid || '',
+            selection,
+            amount,
+            location: bet.location || 'Unknown',
+            at: Date.now()
+        });
+
+        // Keep only recent period buckets.
+        for (const key of liveState.wingoBets.keys()) {
+            if (key < periodId - 20) liveState.wingoBets.delete(key);
+        }
+
+        pushLiveEvent({
+            type: 'bet',
+            game: 'wingo',
+            username: String(bet.username || 'Guest'),
+            uid: bet.uid || '',
+            selection,
+            amount,
+            periodId,
+            location: bet.location || 'Unknown'
+        });
+        emitAdminLive();
+    });
+
+    socket.on('gameSettled', (event = {}) => {
+        pushLiveEvent({
+            type: event.won ? 'win' : 'loss',
+            game: event.game || 'unknown',
+            username: String(event.username || 'Guest'),
+            uid: event.uid || '',
+            amount: Number(event.amount || 0),
+            result: event.result,
+            location: event.location || 'Unknown'
+        });
+        emitAdminLive();
     });
 
     socket.on('disconnect', () => {
+        liveState.activePlayers.delete(socket.id);
+        emitAdminLive();
         console.log('User disconnected');
     });
 });
