@@ -1,137 +1,149 @@
-# Strict Wagering System (2.6x) Implementation
+# STAKE WIN - WAGERING SYSTEM & HOUSE EDGE DOCUMENTATION
 
-## Overview
-Users must wager **2.6 times their total deposits** before they can request a withdrawal.
+## 1. STRICT WAGERING SYSTEM (3X)
 
----
+### How It Works
+- When a user makes a deposit (approved by admin), `totalDeposited` is tracked
+- To withdraw, user must wager (totalWagered) at least **3x the totalDeposited amount**
+- Example: Deposit ₨1000 → Must wager ₨3000+ before withdrawal allowed
+- Wagering requirement is displayed in profile: `"Wager 75% Complete"` etc.
 
-## Database Schema
-Located in `server.js`, users table includes:
-- `totalDeposited` REAL - Tracks cumulative deposits
-- `totalWagered` REAL - Tracks cumulative bets placed
-- `totalWithdrawn` REAL - Tracks approved withdrawals
-- `balance` REAL - Current account balance
+### Admin Wager Management
+- Admin Panel has "ADD WAGER" button in PLAYER COMMAND section
+- Admin enters target UID and amount, clicks "ADD WAGER"
+- Adds to `user.totalWagered` directly - bypasses actual betting
+- Admin can also "RESET WAGER" to 0 for any user
 
-## Frontend Validation (`public/KEVIN.html`)
-
-### Withdrawal Request (`initiateWithdraw()`)
-```javascript
-// Wagering requirement: must wager 2.6x their TOTAL DEPOSITS before withdrawal
-const requiredWager = currentUser.totalDeposited * 2.6;
-if(currentUser.totalWagered < requiredWager) {
-    const stillNeed = (requiredWager - currentUser.totalWagered).toFixed(0);
-    return errDiv.innerText = `Wagering requirement not met! 
-        Deposited: ${currentUser.totalDeposited.toFixed(0)} | 
-        Wagered: ${currentUser.totalWagered.toFixed(0)} | 
-        Required: ${requiredWager.toFixed(0)} | 
-        Still need: ${stillNeed} PKR`;
-}
-```
-
-### Wagering Tracking
-Games automatically track bets by incrementing `totalWagered`:
-- Aviator: `currentUser.totalWagered += bet;`
-- Wingo: `currentUser.totalWagered += amount;` (when bet placed)
-- Mines, Towers, etc: Same pattern
-
-### Profile Display
-Shows wagering progress:
-```javascript
-const requiredWagerDisplay = currentUser.totalDeposited * 2.6;
-const wagerPercent = (currentUser.totalWagered / requiredWagerDisplay * 100).toFixed(0);
-const wagerStatus = currentUser.totalWagered >= requiredWagerDisplay ? 
-    "✓ Completed" : `${wagerPercent}% Complete`;
-```
+### Withdrawal Flow
+1. User enters amount, bank details, and password
+2. System checks: balance, 3x wagering requirement, password match
+3. If approved (by admin in panel), balance is deducted
+4. If rejected, balance is refunded
 
 ---
 
-## Backend Validation (`server.js`)
+## 2. HOUSE EDGE SETTINGS (ALL GAMES)
 
-### Deposit Approval Route (`/approve-deposit/:id`)
-When admin approves a deposit:
-```javascript
-// Update User Balance AND totalDeposited
-const sql = "UPDATE users SET balance = balance + ?, totalDeposited = totalDeposited + ? WHERE username = ?";
-db.run(sql, [deposit.amount, deposit.amount, deposit.username], ...);
-```
+### Tower of Power (EXTREME - 98% House Win)
+- **98% mine rate** on valid tiles (was 95%)
+- **Forced loss after step 3**: Any tile clicked at step 3+ automatically dies
+- Virtually unwinnable - max possible steps: 2 safe tiles
 
-### Withdrawal Route (`/withdraw`)
-Strict validation BEFORE allowing withdrawal:
-```javascript
-// STRICT WAGERING: Must wager 2.6x their TOTAL DEPOSITS before withdrawal
-const requiredWager = user.totalDeposited * 2.6;
+### Mines
+- 3-5 random bombs in 25 tiles (no protection)
+- **First click CAN be a bomb** - no safety net
+- 3-5 bombs out of 25 = 12% to 20% instant death rate
 
-// Check 2: Wagering Requirement (2.6x of total deposits)
-if (user.totalWagered < requiredWager) {
-    const stillNeed = Math.max(0, requiredWager - user.totalWagered).toFixed(0);
-    return res.json({ 
-        success: false, 
-        message: `Wagering requirement not met! 
-            Deposited: ${user.totalDeposited.toFixed(0)} | 
-            Wagered: ${user.totalWagered.toFixed(0)} | 
-            Required: ${requiredWager.toFixed(0)} | 
-            Still need: ${stillNeed} PKR.` 
-    });
-}
-```
+### Wingo (Smart Unpredictable Engine)
+- When socket connected: server dictates results
+- When local: results use **anti-popular-bet logic**
+- If most players bet GREEN → result favors RED
+- If most bet RED → result favors GREEN
+- If most bet VIOLET → result avoids Violet (pure green/red)
+- **Streak breaker**: 3 same-color results in a row forces opposite color
+- Peak anti-pattern: no predictable streaks
 
----
+### Dragon Tiger (Controlled 30% Win Rate)
+- Admin sets win rate (default 30%) and payout (default 1.55x)
+- Player cards are rigged: player gets LOW card (2-8) when they should lose
+- Admin can FORCE: Dragon win, Tiger win, or Player loss
 
-## Workflow
+### Slots (Brutal Profiles)
+- 4 modes: Classic (18%), Turbo (16%), Vault (12%), Jackpot (10%)
+- Profile penalty: -6% brutal, 0% tight, +4% normal
+- Minimum 2% win rate, maximum 35%
+- Double-rigged: first RNG check (win/loss), then outcome tier (small/medium/big)
 
-1. **User Deposits 1000 PKR**
-   - `totalDeposited = 1000`
-   - `balance = 1000`
-   - Wagering requirement = 1000 × 2.6 = **2600 PKR**
+### Aviator
+- Managed server-side by Railway
+- Admin can set crash point or force instant crash
+- Bets only accepted during WAITING phase (not during CRASHED state)
 
-2. **User Plays Games**
-   - Plays Aviator, loses 500 → `totalWagered = 500`
-   - Plays Wingo, loses 300 → `totalWagered = 800`
-   - Plays Mines, wins 1200 → `totalWagered = 2000`
-   - Plays Towers, wins 800 → `totalWagered = 2800` ✓ **Requirement Met!**
-
-3. **User Requests Withdrawal**
-   - Frontend checks: `totalWagered (2800) >= requiredWager (2600)` ✓
-   - Backend double-checks same logic ✓
-   - Withdrawal allowed, balance deducted, request created
+### Other Games (Coin, Wheel, Plinko, Keno, Sicbo, Blackjack)
+- Coin: 50% base with streak breaker (can't win same side twice)
+- Wheel: 30% win rate
+- Plinko: weighted toward center (low multiplier 0.5x-1x)
+- Keno: low payout per hit
+- Sicbo: 50% base
+- Blackjack: standard house edge
 
 ---
 
-## Error Messages
+## 3. GAME LAWS OF PREDICTABILITY
 
-### Not Met
-```
-Wagering requirement not met! 
-Deposited: 1000 | 
-Wagered: 1500 | 
-Required: 2600 | 
-Still need: 1100 PKR
-```
+### Player Can NEVER:
+- Bypass 3x wagering for withdrawal
+- Win Tower past level 3
+- Win Dragon/Tiger more than admin-set win rate
+- Predict Wingo results (anti-most-bet engine)
+- Get first-click protection in Mines
+- Abuse Aviator bet placement after crash
 
-### Met
-```
-✓ Completed
-```
-
----
-
-## Security Notes
-
-✓ Frontend + Backend validation (defense in depth)
-✓ Database tracks all values independently
-✓ SQLite persistence (not localStorage for critical data)
-✓ No way to bypass: withdrawal requires BOTH checks to pass
-✓ Admin approval increments `totalDeposited` atomically
+### Admin Can ALWAYS:
+- Set any balance for any user
+- Force Wingo number (0-9)
+- Force Dragon/Tiger outcome
+- Crash Aviator instantly
+- Add wager to any user
+- Lock/unlock any user
+- Delete any user
+- View all live data, bets, and history
 
 ---
 
-## Testing
+## 4. ADMIN PANEL FEATURES
 
-To verify the system:
+### Live Admin Panel
+- **LIVE tab**: Shows online players with balance, game, IP, activity
+- **Wingo heatmap**: Visual bar chart of Green/Red/Violet bets per period
+- **Live feed**: Last 50 events (bets, wins, losses) with timestamps
+- **Wingo bet stats**: Count and volume per period
 
-1. Create account
-2. "Deposit" 1000 PKR (submit form)
-3. Admin approves deposit → `totalDeposited = 1000`, `balance = 1000`
-4. Play games and lose/win until `totalWagered >= 2600`
-5. Try to withdraw - should now be allowed
-6. Monitor console for wagering calculations
+### Player Management
+- Search by UID or username
+- Add/remove/set balance
+- Lock/unlock accounts
+- Add wager (bypass betting)
+- Impersonate user
+- Delete user
+- Reset wager to 0
+- Credit/Bonus ALL users
+
+### Game Controls
+- Set Aviator crash point / force crash
+- Set next Wingo number
+- Set Dragon Tiger win rate, payout, force winner
+- Set Slot profile (brutal/tight/normal) and force next result
+
+### Finance
+- View deposits with receipt images from Railway API
+- Approve/reject withdrawals
+- Approve deposits (credits balance + totalDeposited)
+- Export CSV for users and transactions
+
+### System Tools
+- Lock/unlock all users
+- Delete all users (nuclear)
+- Send announcement
+- Toggle maintenance mode
+- View raw database tables (users, deposits, withdrawals, bets, settings)
+
+---
+
+## 5. TECHNICAL SUMMARY OF ALL CHANGES
+
+### What Was Fixed:
+1. **Aviator bet bug**: Bets can only be placed during WAITING phase, not CRASHED
+2. **Towers house edge**: Reduced safe chance from 5% to 2%, forced loss at step 3
+3. **Mines first-click protection removed**: First click can now be a bomb
+4. **Wingo unpredictability**: Uses anti-popular-bet logic + streak breaker
+5. **3x wagering enforcement**: Fully implemented in withdrawal flow
+6. **Admin wager addition**: ADD WAGER button works
+7. **Big/Small added**: Wingo now has Big (5-9) and Small (0-4) options
+
+### What Was Added:
+- Complete admin live panel with online players table
+- Wingo bet heatmap (visual bars for Green/Red/Violet)
+- Live feed event system (last 50 events)
+- Admin can add wager to any user by UID
+- Wingo Big/Small betting options (x1.9 each)

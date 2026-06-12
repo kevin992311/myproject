@@ -460,7 +460,7 @@ app.post('/deposit', upload.single('receipt'), (req, res) => {
 });
 
 // =========================
-// WITHDRAWAL ROUTE (2.6x WAGER CHECK)
+// WITHDRAWAL ROUTE (3x WAGER CHECK)
 // =========================
 
 app.post('/withdraw', (req, res) => {
@@ -470,14 +470,14 @@ app.post('/withdraw', (req, res) => {
         if (!user) return res.json({ success: false, message: 'User not found' });
 
         const withdrawAmount = Number(amount);
-        const requiredWager = user.totalDeposited * 2.6;
+        const requiredWager = user.totalDeposited * 3;
 
         if (withdrawAmount <= 0) {
             return res.json({ success: false, message: 'Invalid withdrawal amount' });
         }
 
         if (user.totalDeposited <= 0) {
-            return res.json({ success: false, message: 'Withdrawals require an approved deposit and 2.6x wagering.' });
+            return res.json({ success: false, message: 'Withdrawals require an approved deposit and 3x wagering.' });
         }
 
         if (user.balance < withdrawAmount) {
