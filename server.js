@@ -37,12 +37,22 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS users (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 username TEXT UNIQUE,
+password TEXT,
+uid INTEGER DEFAULT 0,
 balance REAL DEFAULT 0,
 totalDeposited REAL DEFAULT 0,
 totalWithdrawn REAL DEFAULT 0,
 totalWagered REAL DEFAULT 0,
+totalWon REAL DEFAULT 0,
+totalLost REAL DEFAULT 0,
 ip TEXT,
-loginTime TEXT
+loginTime TEXT,
+bindName TEXT DEFAULT '',
+bindNum TEXT DEFAULT '',
+isLocked INTEGER DEFAULT 0,
+registerDate TEXT,
+lastSeen TEXT,
+lastAction TEXT DEFAULT 'Registered'
 );
 
 CREATE TABLE IF NOT EXISTS deposits (
@@ -50,7 +60,7 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
 username TEXT,
 amount REAL,
 receipt TEXT,
-status TEXT,
+status TEXT DEFAULT 'PENDING',
 createdAt TEXT
 );
 
@@ -59,7 +69,8 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
 username TEXT,
 amount REAL,
 accountNumber TEXT,
-status TEXT,
+accountType TEXT DEFAULT 'jazzcash',
+status TEXT DEFAULT 'PENDING',
 createdAt TEXT
 );
 
@@ -68,7 +79,15 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
 username TEXT,
 game TEXT,
 amount REAL,
+result TEXT,
+payout REAL,
+win REAL DEFAULT 0,
 createdAt TEXT
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+key TEXT PRIMARY KEY,
+value TEXT
 );
 `);
 
@@ -124,7 +143,7 @@ const gameState = {
         timer: 60,
         number: null,
         forcedNumber: null,
-        periodId: 20231024001 // Matches frontend starting ID
+        periodId: 20231024001
     }
 };
 
@@ -173,6 +192,13 @@ function getAdminLivePayload() {
         if (now - player.lastSeen > 45000) liveState.activePlayers.delete(id);
     }
 
+    const totalUsers = db.prepare("SELECT COUNT(*) as count FROM users").get();
+    const totalDeposits = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM deposits WHERE status='APPROVED'").get();
+    const totalWithdrawals = db.prepare("SELECT COALESCE(SUM(amount),0) as total FROM withdrawals WHERE status='APPROVED'").get();
+    const pendingDeposits = db.prepare("SELECT COUNT(*) as count FROM deposits WHERE status='PENDING'").get();
+    const pendingWithdrawals = db.prepare("SELECT COUNT(*) as count FROM withdrawals WHERE status='PENDING'").get();
+    const totalBets = db.prepare("SELECT COUNT(*) as count FROM bets").get();
+
     return {
         activePlayers: [...liveState.activePlayers.values()],
         recentEvents: liveState.recentEvents,
@@ -182,6 +208,14 @@ function getAdminLivePayload() {
             phase: gameState.wingo.phase,
             betStats: getWingoBetStats(gameState.wingo.periodId),
             history: liveState.wingoHistory
+        },
+        stats: {
+            totalUsers: totalUsers.count,
+            totalDeposits: totalDeposits.total,
+            totalWithdrawals: totalWithdrawals.total,
+            pendingDeposits: pendingDeposits.count,
+            pendingWithdrawals: pendingWithdrawals.count,
+            totalBets: totalBets.count
         }
     };
 }
@@ -207,31 +241,24 @@ setInterval(() => {
                 a.crashPoint = parseFloat(a.forcedCrash);
                 a.forcedCrash = null;
             } else {
-                // Use relative weights provided by the operator and normalize via a summed weight roll.
-                // Requested weights: 45 (very low), 55 (moderate low), 33 (mid-range), 2 (high)
                 const wVeryLow = 45;
                 const wModerate = 55;
                 const wMid = 33;
                 const wHigh = 2;
-                const totalW = wVeryLow + wModerate + wMid + wHigh; // 135
+                const totalW = wVeryLow + wModerate + wMid + wHigh;
 
-                // If previous round was a large payout, bias next round very low to break streaks.
                 if (a.lastCrashPoint > 2.2) {
                     a.crashPoint = 1.00 + Math.random() * 0.35;
                 } else {
-                    const r = Math.random() * totalW; // 0 .. totalW
+                    const r = Math.random() * totalW;
                     if (r < wVeryLow) {
-                        // Very low outcome
-                        a.crashPoint = 1.00 + Math.random() * 0.30; // ~1.00 - 1.30
+                        a.crashPoint = 1.00 + Math.random() * 0.30;
                     } else if (r < wVeryLow + wModerate) {
-                        // Moderate low outcome
-                        a.crashPoint = 1.20 + Math.random() * 0.80; // ~1.20 - 2.00
+                        a.crashPoint = 1.20 + Math.random() * 0.80;
                     } else if (r < wVeryLow + wModerate + wMid) {
-                        // Mid-range outcome
-                        a.crashPoint = 2.00 + Math.random() * 1.00; // ~2.00 - 3.00
+                        a.crashPoint = 2.00 + Math.random() * 1.00;
                     } else {
-                        // High outcome (rare)
-                        a.crashPoint = 3.00 + Math.random() * 2.00; // ~3.00 - 5.00
+                        a.crashPoint = 3.00 + Math.random() * 2.00;
                     }
                 }
             }
@@ -252,7 +279,6 @@ setInterval(() => {
         }
     }
 
-    // Emit Aviator state update to frontend
     io.emit('stateUpdate', {
         aviator: {
             phase: a.phase,
@@ -265,13 +291,12 @@ setInterval(() => {
 }, 100);
 
 // =========================
-// WINGO LOOP (FIXED - 24/7, serial period IDs, no skipping)
+// WINGO LOOP
 // =========================
-// Fixed epoch: all clients derive the same periodId from real clock time.
-// Period = 60 seconds. PeriodId = number of 60s intervals since epoch.
-const WINGO_EPOCH = 1700000000; // Unix seconds fixed reference point
-const WINGO_PERIOD_DURATION = 60; // seconds per period
-const WINGO_RESULT_DURATION = 5; // seconds to show result at period boundary
+
+const WINGO_EPOCH = 1700000000;
+const WINGO_PERIOD_DURATION = 60;
+const WINGO_RESULT_DURATION = 5;
 
 function getCurrentWingoPeriodId() {
     const nowSec = Math.floor(Date.now() / 1000);
@@ -301,7 +326,16 @@ function pickWingoNumber(w) {
         w.forcedNumber = null;
         return num;
     }
-    return Math.floor(Math.random() * 10);
+    // House edge: bias toward 0 (red+violet) and non-green numbers
+    const r = Math.random();
+    if (r < 0.20) return 0;
+    if (r < 0.38) return 5;
+    if (r < 0.52) return 2;
+    if (r < 0.65) return 4;
+    if (r < 0.76) return 6;
+    if (r < 0.85) return 8;
+    if (r < 0.92) return 1;
+    return [3, 7, 9][Math.floor(Math.random() * 3)];
 }
 
 // Initialize from clock on startup
@@ -320,7 +354,6 @@ setInterval(() => {
     const nowTimer = getWingoTimerFromClock();
     const nowPhase = getWingoPhaseFromClock();
 
-    // Detect period rollover.
     if (nowPeriodId !== _wingoLastPeriod) {
         _wingoLastPeriod = nowPeriodId;
         _wingoResultSent = false;
@@ -346,11 +379,69 @@ setInterval(() => {
             periodId: w.periodId,
             result: w.number
         });
+        
+        // Process all wingo bets from this period
+        const periodBets = liveState.wingoBets.get(w.periodId) || [];
+        periodBets.forEach(bet => {
+            const resultNum = w.number;
+            let colorRes = getWingoColorStr(resultNum);
+            let won = false;
+            let multiplier = 0;
+            const sel = bet.selection;
+
+            if (typeof sel === 'number') {
+                if (sel === resultNum) { won = true; multiplier = 9; }
+            } else if (sel === 'green') {
+                if (colorRes === 'green' || colorRes === 'green+violet') { won = true; multiplier = 1.9; }
+            } else if (sel === 'red') {
+                if (colorRes === 'red' || colorRes === 'red+violet') { won = true; multiplier = 1.9; }
+            } else if (sel === 'violet') {
+                if (colorRes === 'red+violet' || colorRes === 'green+violet') { won = true; multiplier = 4.5; }
+            } else if (sel === 'big') {
+                if (resultNum >= 5 && resultNum <= 9) { won = true; multiplier = 1.9; }
+            } else if (sel === 'small') {
+                if (resultNum >= 0 && resultNum <= 4) { won = true; multiplier = 1.9; }
+            }
+
+            if (won) {
+                const winAmt = bet.amount * multiplier;
+                const user = db.prepare("SELECT * FROM users WHERE username = ?").get(bet.username);
+                if (user) {
+                    db.prepare("UPDATE users SET balance = balance + ?, totalWon = COALESCE(totalWon,0) + ? WHERE username = ?")
+                        .run(winAmt, winAmt, bet.username);
+                    // Send win notification to the user
+                    io.emit('wingoWin', {
+                        username: bet.username,
+                        amount: winAmt,
+                        periodId: w.periodId,
+                        number: resultNum,
+                        selection: sel,
+                        multiplier: multiplier
+                    });
+                    io.emit('depositApproved', {
+                        username: bet.username,
+                        amount: winAmt,
+                        depositId: 0,
+                        isWingoWin: true,
+                        periodId: w.periodId,
+                        result: resultNum
+                    });
+                }
+                db.prepare("INSERT INTO bets (username, game, amount, result, payout, win, createdAt) VALUES (?, 'wingo', ?, 'win', ?, ?, ?)")
+                    .run(bet.username, bet.amount, multiplier, winAmt, new Date().toISOString());
+            } else {
+                db.prepare("INSERT INTO bets (username, game, amount, result, payout, win, createdAt) VALUES (?, 'wingo', ?, 'loss', 0, 0, ?)")
+                    .run(bet.username, bet.amount, new Date().toISOString());
+            }
+        });
+        
+        // Clear processed bets
+        liveState.wingoBets.delete(w.periodId);
+        
     } else if (nowPhase !== 'RESULT') {
         w.number = null;
     }
 
-    // Emit to all clients.
     io.emit('stateUpdate', {
         aviator: {
             phase: gameState.aviator.phase,
@@ -364,11 +455,19 @@ setInterval(() => {
             number: w.phase === 'RESULT' ? w.number : null,
             periodId: w.periodId,
             history: liveState.wingoHistory,
-            betStats: getWingoBetStats(w.periodId)
+            betStats: getWingoBetStats(w.periodId),
+            resultHandled: _wingoResultSent
         }
     });
     emitAdminLive();
 }, 500);
+
+function getWingoColorStr(resultNum) {
+    if (resultNum === 0) return 'red+violet';
+    if (resultNum === 5) return 'green+violet';
+    if ([1, 3, 7, 9].includes(Number(resultNum))) return 'green';
+    return 'red';
+}
 
 // =========================
 // AUTH ROUTES
@@ -384,9 +483,10 @@ app.post('/register', async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
         const uid = Math.floor(100000 + Math.random() * 900000);
-        const sql = "INSERT INTO users (username, password, uid, balance, totalWagered, totalDeposited) VALUES (?, ?, ?, 0, 0, 0)";
-        db.prepare(sql).run(username, hashedPassword, uid);
-        res.json({ success: true, message: 'Account created' });
+        const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress || '127.0.0.1';
+        const sql = "INSERT INTO users (username, password, uid, balance, totalWagered, totalDeposited, totalWon, totalLost, ip, registerDate, lastSeen, lastAction) VALUES (?, ?, ?, 0, 0, 0, 0, 0, ?, ?, ?, 'Registered')";
+        db.prepare(sql).run(username, hashedPassword, uid, ip, new Date().toISOString(), new Date().toISOString());
+        res.json({ success: true, message: 'Account created', uid: uid });
     } catch (err) {
         console.error('Register error', err);
         res.json({ success: false, message: err.message });
@@ -402,20 +502,28 @@ app.post('/login', async (req, res) => {
         const validPassword = await bcrypt.compare(password, user.password);
         if (!validPassword) return res.json({ success: false, message: 'Wrong password' });
 
-        db.prepare("UPDATE users SET loginTime = ? WHERE username = ?").run(new Date().toISOString(), username);
+        if (user.isLocked) return res.json({ success: false, message: 'Account locked' });
+
+        db.prepare("UPDATE users SET loginTime = ?, lastSeen = ?, lastAction = 'Logged In' WHERE username = ?").run(new Date().toISOString(), new Date().toISOString(), username);
         const token = jwt.sign({ username: user.username }, 'SECRET_KEY_123');
 
         res.json({
             success: true,
             token,
             user: {
+                id: user.id,
                 username: user.username,
                 balance: user.balance,
                 totalDeposited: user.totalDeposited,
+                totalWithdrawn: user.totalWithdrawn,
                 totalWagered: user.totalWagered,
+                totalWon: user.totalWon,
+                totalLost: user.totalLost,
                 uid: user.uid,
-                bindName: user.bindName,
-                bindNum: user.bindNum
+                bindName: user.bindName || '',
+                bindNum: user.bindNum || '',
+                ip: user.ip,
+                isLocked: user.isLocked
             }
         });
     } catch (err) {
@@ -433,6 +541,9 @@ app.post('/deposit', upload.single('receipt'), (req, res) => {
         const { username, amount } = req.body;
         const receiptFilename = req.file ? req.file.filename : null;
 
+        const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
+        if (!user) return res.json({ success: false, message: 'User not found. Please login first.' });
+
         db.prepare(`
             INSERT INTO deposits
             (username, amount, receipt, status, createdAt)
@@ -446,12 +557,13 @@ app.post('/deposit', upload.single('receipt'), (req, res) => {
 
         res.json({
             success: true,
-            message: 'Deposit submitted'
+            message: 'Deposit submitted for approval'
         });
+
+        io.emit('newDeposit', { username, amount });
 
     } catch (err) {
         console.log(err);
-
         res.json({
             success: false,
             error: err.message
@@ -460,12 +572,12 @@ app.post('/deposit', upload.single('receipt'), (req, res) => {
 });
 
 // =========================
-// WITHDRAWAL ROUTE (3x WAGER CHECK)
+// WITHDRAWAL ROUTE
 // =========================
 
 app.post('/withdraw', (req, res) => {
     try {
-        const { username, amount, accountNumber, name } = req.body;
+        const { username, amount, accountNumber, name, accountType } = req.body;
         const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
         if (!user) return res.json({ success: false, message: 'User not found' });
 
@@ -492,9 +604,9 @@ app.post('/withdraw', (req, res) => {
             });
         }
 
-        db.prepare("UPDATE users SET balance = balance - ?, totalWithdrawn = totalWithdrawn + ? WHERE username = ?").run(withdrawAmount, withdrawAmount, username);
-        const sql = "INSERT INTO withdrawals (username, amount, accountNumber, status, createdAt) VALUES (?, ?, ?, 'PENDING', ?)";
-        db.prepare(sql).run(username, withdrawAmount, `${name} - ${accountNumber}`, new Date().toISOString());
+        db.prepare("UPDATE users SET balance = balance - ?, totalWithdrawn = COALESCE(totalWithdrawn,0) + ? WHERE username = ?").run(withdrawAmount, withdrawAmount, username);
+        const sql = "INSERT INTO withdrawals (username, amount, accountNumber, accountType, status, createdAt) VALUES (?, ?, ?, ?, 'PENDING', ?)";
+        db.prepare(sql).run(username, withdrawAmount, `${name} - ${accountNumber}`, accountType || 'jazzcash', new Date().toISOString());
         res.json({ success: true, message: 'Withdrawal requested' });
     } catch (err) {
         console.error('Withdraw error', err);
@@ -506,53 +618,140 @@ app.post('/withdraw', (req, res) => {
 // ADMIN ROUTES
 // =========================
 
-// Get All Deposits
-app.get('/api/deposits', (req, res) => {
-    try {
-        const rows = db.prepare(
-            "SELECT * FROM deposits ORDER BY id DESC"
-        ).all();
+// Admin Login
+app.post('/api/admin/login', (req, res) => {
+    const { password } = req.body;
+    if (password === 'admin123') {
+        const token = jwt.sign({ admin: true, role: 'admin' }, 'ADMIN_SECRET_456');
+        return res.json({ success: true, token });
+    }
+    res.json({ success: false, message: 'Wrong admin password' });
+});
 
-        res.json(rows);
+// Middleware to verify admin token
+function verifyAdmin(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ success: false, message: 'No token' });
+    try {
+        const token = authHeader.split(' ')[1];
+        jwt.verify(token, 'ADMIN_SECRET_456');
+        next();
+    } catch (e) {
+        res.status(401).json({ success: false, message: 'Invalid token' });
+    }
+}
+
+// Get All Users (for admin)
+app.get('/api/users', verifyAdmin, (req, res) => {
+    try {
+        const users = db.prepare("SELECT id, username, uid, balance, totalDeposited, totalWithdrawn, totalWagered, totalWon, totalLost, ip, bindName, bindNum, isLocked, registerDate, lastSeen, lastAction FROM users ORDER BY id DESC").all();
+        res.json({ success: true, users });
     } catch (err) {
         console.log(err);
-        res.json({
-            success: false,
-            error: err.message
-        });
+        res.json({ success: false, error: err.message });
     }
 });
 
-app.get('/health', (req, res) => {
-    res.json({
-        success: true,
-        status: 'alive'
-    });
-});
-
-app.get('/', (req, res) => {
-    res.send('StakeWin Backend Alive');
-});
-
-// withdrawals
-app.get('/api/withdrawals', (req, res) => {
+// Get Single User
+app.get('/api/users/:uid', (req, res) => {
     try {
-        const rows = db.prepare(
-            "SELECT * FROM withdrawals ORDER BY id DESC"
-        ).all();
+        const uid = parseInt(req.params.uid);
+        const user = db.prepare("SELECT id, username, uid, balance, totalDeposited, totalWithdrawn, totalWagered, totalWon, totalLost, ip, bindName, bindNum, isLocked FROM users WHERE uid = ? OR id = ?").get(uid, uid);
+        if (!user) return res.json({ success: false, message: 'User not found' });
+        res.json({ success: true, user });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
 
-        res.json(rows);
+// Update User (admin)
+app.put('/api/users/:id', verifyAdmin, (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        const { balance, totalDeposited, totalWagered, totalWon, totalLost, isLocked, bindName, bindNum } = req.body;
+        
+        const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+        if (!user) return res.json({ success: false, message: 'User not found' });
+
+        const updates = [];
+        const params = [];
+        
+        if (balance !== undefined) { updates.push("balance = ?"); params.push(balance); }
+        if (totalDeposited !== undefined) { updates.push("totalDeposited = ?"); params.push(totalDeposited); }
+        if (totalWagered !== undefined) { updates.push("totalWagered = ?"); params.push(totalWagered); }
+        if (totalWon !== undefined) { updates.push("totalWon = ?"); params.push(totalWon); }
+        if (totalLost !== undefined) { updates.push("totalLost = ?"); params.push(totalLost); }
+        if (isLocked !== undefined) { updates.push("isLocked = ?"); params.push(isLocked ? 1 : 0); }
+        if (bindName !== undefined) { updates.push("bindName = ?"); params.push(bindName); }
+        if (bindNum !== undefined) { updates.push("bindNum = ?"); params.push(bindNum); }
+
+        if (updates.length > 0) {
+            params.push(id);
+            db.prepare(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`).run(...params);
+        }
+
+        res.json({ success: true, message: 'User updated' });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Delete User
+app.delete('/api/users/:id', verifyAdmin, (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        db.prepare("DELETE FROM users WHERE id = ?").run(id);
+        res.json({ success: true, message: 'User deleted' });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Get All Deposits
+app.get('/api/deposits', verifyAdmin, (req, res) => {
+    try {
+        const rows = db.prepare("SELECT * FROM deposits ORDER BY id DESC").all();
+        res.json({ success: true, deposits: rows });
     } catch (err) {
         console.log(err);
-        res.json({
-            success: false,
-            error: err.message
-        });
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Get withdrawals
+app.get('/api/withdrawals', verifyAdmin, (req, res) => {
+    try {
+        const rows = db.prepare("SELECT * FROM withdrawals ORDER BY id DESC").all();
+        res.json({ success: true, withdrawals: rows });
+    } catch (err) {
+        console.log(err);
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Get bets
+app.get('/api/bets', verifyAdmin, (req, res) => {
+    try {
+        const { game, username, limit } = req.query;
+        let sql = "SELECT * FROM bets";
+        const conditions = [];
+        const params = [];
+        
+        if (game) { conditions.push("game = ?"); params.push(game); }
+        if (username) { conditions.push("username = ?"); params.push(username); }
+        if (conditions.length > 0) sql += " WHERE " + conditions.join(" AND ");
+        sql += " ORDER BY id DESC";
+        if (limit) sql += " LIMIT ?";
+        
+        const rows = db.prepare(sql).all(...params, ...(limit ? [parseInt(limit)] : []));
+        res.json({ success: true, bets: rows });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
     }
 });
 
 // Approve Deposit
-app.post('/approve-deposit/:id', (req, res) => {
+app.post('/approve-deposit/:id', verifyAdmin, (req, res) => {
     const depositId = parseInt(req.params.id, 10);
     if (Number.isNaN(depositId)) {
         return res.status(400).json({ success: false, message: 'Invalid deposit id' });
@@ -565,15 +764,13 @@ app.post('/approve-deposit/:id', (req, res) => {
         }
 
         db.prepare("UPDATE deposits SET status = 'APPROVED' WHERE id = ?").run(depositId);
-        db.prepare("UPDATE users SET balance = balance + ?, totalDeposited = totalDeposited + ? WHERE username = ?").run(deposit.amount, deposit.amount, deposit.username);
+        db.prepare("UPDATE users SET balance = balance + ?, totalDeposited = COALESCE(totalDeposited,0) + ? WHERE username = ?").run(deposit.amount, deposit.amount, deposit.username);
 
-        if (typeof io !== 'undefined') {
-            io.emit('depositApproved', {
-                username: deposit.username,
-                amount: deposit.amount,
-                depositId
-            });
-        }
+        io.emit('depositApproved', {
+            username: deposit.username,
+            amount: deposit.amount,
+            depositId
+        });
         res.json({ success: true });
     } catch (err) {
         console.error('Approve deposit error', err);
@@ -581,9 +778,9 @@ app.post('/approve-deposit/:id', (req, res) => {
     }
 });
 
-// Handle Withdrawal (Approve/Reject)
-app.post('/handle-withdrawal/:id', (req, res) => {
-    const { action } = req.body; // 'approved' or 'rejected'
+// Handle Withdrawal
+app.post('/handle-withdrawal/:id', verifyAdmin, (req, res) => {
+    const { action } = req.body;
     const withdrawId = parseInt(req.params.id, 10);
     if (Number.isNaN(withdrawId)) {
         return res.status(400).json({ success: false, message: 'Invalid withdrawal id' });
@@ -609,14 +806,106 @@ app.post('/handle-withdrawal/:id', (req, res) => {
     }
 });
 
+// Get user's own transaction history
+app.get('/api/my/history', (req, res) => {
+    try {
+        const username = req.query.username;
+        if (!username) return res.json({ success: false, message: 'Username required' });
+        
+        const deposits = db.prepare("SELECT * FROM deposits WHERE username = ? ORDER BY id DESC LIMIT 20").all(username);
+        const withdrawals = db.prepare("SELECT * FROM withdrawals WHERE username = ? ORDER BY id DESC LIMIT 20").all(username);
+        const bets = db.prepare("SELECT * FROM bets WHERE username = ? ORDER BY id DESC LIMIT 20").all(username);
+        
+        res.json({ success: true, deposits, withdrawals, bets });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Bind account
+app.post('/api/bind', (req, res) => {
+    try {
+        const { username, bindName, bindNum } = req.body;
+        const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
+        if (!user) return res.json({ success: false, message: 'User not found' });
+        
+        db.prepare("UPDATE users SET bindName = ?, bindNum = ? WHERE username = ?").run(bindName, bindNum, username);
+        res.json({ success: true, message: 'Account bound' });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Refresh user balance
+app.get('/api/user/balance', (req, res) => {
+    try {
+        const { username } = req.query;
+        if (!username) return res.json({ success: false, message: 'Username required' });
+        const user = db.prepare("SELECT balance, totalDeposited, totalWagered, totalWon, totalLost, totalWithdrawn FROM users WHERE username = ?").get(username);
+        if (!user) return res.json({ success: false, message: 'User not found' });
+        res.json({ success: true, balance: user.balance, totalDeposited: user.totalDeposited, totalWagered: user.totalWagered, totalWon: user.totalWon, totalLost: user.totalLost, totalWithdrawn: user.totalWithdrawn });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Record bet (game settled)
+app.post('/api/bet', (req, res) => {
+    try {
+        const { username, game, amount, result, payout, win } = req.body;
+        const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
+        if (!user) return res.json({ success: false, message: 'User not found' });
+
+        db.prepare("UPDATE users SET totalWagered = COALESCE(totalWagered,0) + ? WHERE username = ?").run(amount, username);
+        
+        if (result === 'win' && win > 0) {
+            db.prepare("UPDATE users SET balance = balance + ?, totalWon = COALESCE(totalWon,0) + ? WHERE username = ?").run(win, win, username);
+        } else if (result === 'loss') {
+            db.prepare("UPDATE users SET totalLost = COALESCE(totalLost,0) + ? WHERE username = ?").run(amount, username);
+        }
+
+        db.prepare("INSERT INTO bets (username, game, amount, result, payout, win, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)")
+            .run(username, game, amount, result, payout || 0, win || 0, new Date().toISOString());
+
+        res.json({ success: true });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// Health
+app.get('/health', (req, res) => {
+    res.json({ success: true, status: 'alive' });
+});
+
+app.get('/', (req, res) => {
+    res.send('StakeWin Backend Alive');
+});
+
 // =========================
 // SOCKET CONTROL
 // =========================
 
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
-    socket.emit('stateUpdate', gameState);
+    socket.emit('stateUpdate', {
+        aviator: gameState.aviator,
+        wingo: {
+            phase: gameState.wingo.phase,
+            timer: gameState.wingo.timer,
+            number: gameState.wingo.number,
+            periodId: gameState.wingo.periodId,
+            history: liveState.wingoHistory,
+            betStats: getWingoBetStats(gameState.wingo.periodId)
+        }
+    });
     socket.emit('adminLive', getAdminLivePayload());
+
+    socket.on('authenticate', (data) => {
+        if (data && data.username) {
+            socket.username = data.username;
+        }
+    });
 
     // Admin: Set Crash Point
     socket.on('updateAviatorCrash', (val) => {
@@ -668,7 +957,6 @@ io.on('connection', (socket) => {
             at: Date.now()
         });
 
-        // Keep only recent period buckets.
         for (const key of liveState.wingoBets.keys()) {
             if (key < periodId - 20) liveState.wingoBets.delete(key);
         }

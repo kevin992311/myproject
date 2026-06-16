@@ -8,14 +8,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <style>
-        :root {
-            --bg-dark: #0b0e11; --bg-sidebar: #1a202c; --bg-card: #2d3748;
-            --primary: #ffc800; --primary-glow: rgba(255, 200, 0, 0.4);
-            --text-main: #ffffff; --text-muted: #a0aec0;
-            --green: #00e701; --red: #ff4d4d; --violet: #9d00ff;
-            --border: #4a5568;
-        }
+        <style>
+            :root {
+                --bg-dark: #0b0e11; --bg-sidebar: #1a202c; --bg-card: #2d3748;
+                --primary: #ffc800; --primary-glow: rgba(255, 200, 0, 0.4);
+                --text-main: #ffffff; --text-muted: #a0aec0;
+                --green: #00e701; --red: #ff4d4d; --violet: #9d00ff;
+                --border: #4a5568;
+                --easy: #0f9d58; --jazz: #1a73e8;
+            }
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
         
         /* Mobile Viewport Fix Helper */
@@ -255,6 +256,100 @@
         
         .confetti { position: absolute; width: 10px; height: 10px; background: var(--primary); animation: fall linear forwards; }
         @keyframes fall { to { transform: translateY(100vh) rotate(720deg); } }
+
+        /* =========================================
+           EXCLUSIVE FEATURES
+           ========================================= */
+        .jackpot-bar {
+            background: linear-gradient(90deg, #1a0505, #3d0a0a, #1a0505);
+            border: 1px solid #ff6b6b;
+            border-radius: 8px;
+            padding: 8px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            flex-shrink: 0;
+            animation: jackpotPulse 2s infinite;
+        }
+        @keyframes jackpotPulse { 0%, 100% { box-shadow: 0 0 10px rgba(255, 107, 107, 0.3); } 50% { box-shadow: 0 0 25px rgba(255, 107, 107, 0.6); } }
+        .jackpot-amount {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 28px;
+            font-weight: 900;
+            color: #ff6b6b;
+            text-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
+        }
+        .jackpot-label { font-size: 10px; color: #ff9999; text-transform: uppercase; letter-spacing: 1px; }
+        .jackpot-ticket-btn {
+            background: linear-gradient(135deg, #ff416c, #ff4b2b);
+            color: white; border: none; padding: 6px 15px; border-radius: 20px;
+            font-weight: bold; font-size: 12px; cursor: pointer; font-family: 'Rajdhani', sans-serif;
+            box-shadow: 0 0 15px rgba(255, 65, 108, 0.4);
+        }
+        .jackpot-ticket-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
+        .jackpot-ticket-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .missions-container {
+            display: flex; gap: 8px; overflow-x: auto; padding: 8px 0; flex-shrink: 0;
+            scrollbar-width: none; -ms-overflow-style: none;
+        }
+        .missions-container::-webkit-scrollbar { display: none; }
+        .mission-card {
+            min-width: 180px; background: #1a202c; border: 1px solid var(--border); border-radius: 10px;
+            padding: 10px 14px; flex-shrink: 0; position: relative; overflow: hidden;
+        }
+        .mission-card.completed { border-color: var(--green); background: #0a2a0a; }
+        .mission-card.completed::after {
+            content: '✓'; position: absolute; top: 5px; right: 8px; color: var(--green); font-size: 18px; font-weight: bold;
+        }
+        .mission-icon { font-size: 20px; margin-bottom: 4px; }
+        .mission-title { font-size: 11px; font-weight: 700; color: white; }
+        .mission-progress { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+        .mission-bar { height: 3px; background: #333; border-radius: 2px; margin-top: 5px; overflow: hidden; }
+        .mission-fill { height: 100%; background: var(--primary); border-radius: 2px; transition: width 0.5s; }
+        .mission-reward { font-size: 9px; color: var(--primary); margin-top: 3px; }
+
+        .wins-ticker {
+            height: 28px; overflow: hidden; background: rgba(0,0,0,0.3); border-radius: 6px;
+            display: flex; align-items: center; padding: 0 10px; position: relative; flex-shrink: 0;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .ticker-item {
+            position: absolute; white-space: nowrap; font-size: 11px; color: #aaa;
+            animation: tickerScroll 8s linear infinite; opacity: 0;
+        }
+        .ticker-item:nth-child(1) { animation-delay: 0s; }
+        .ticker-item:nth-child(2) { animation-delay: 4s; }
+        @keyframes tickerScroll { 0% { opacity: 0; transform: translateX(100%); } 5% { opacity: 1; } 45% { opacity: 1; } 50% { opacity: 0; transform: translateX(-100%); } 100% { opacity: 0; } }
+        .ticker-win { color: var(--green); font-weight: bold; }
+        .ticker-game { color: var(--primary); }
+
+        .streak-display {
+            display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.3);
+            padding: 5px 12px; border-radius: 20px; border: 1px solid transparent;
+            transition: all 0.3s; flex-shrink: 0;
+        }
+        .streak-display.active { border-color: var(--primary); box-shadow: 0 0 10px var(--primary-glow); }
+        .streak-fire { font-size: 16px; }
+        .streak-count { font-size: 16px; font-weight: 900; font-family: 'Rajdhani', sans-serif; color: var(--primary); }
+        .streak-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; }
+
+        .vip-tier-display {
+            display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+        }
+        .vip-badge {
+            font-size: 10px; font-weight: 900; padding: 3px 10px; border-radius: 10px;
+            background: linear-gradient(135deg, #667eea, #764ba2); color: white;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .vip-badge.bronze { background: linear-gradient(135deg, #cd7f32, #8b4513); }
+        .vip-badge.silver { background: linear-gradient(135deg, #c0c0c0, #808080); }
+        .vip-badge.gold { background: linear-gradient(135deg, #ffd700, #b8860b); }
+        .vip-badge.platinum { background: linear-gradient(135deg, #e5e4e2, #708090); }
+        .vip-badge.diamond { background: linear-gradient(135deg, #b9f2ff, #00bfff); color: #000; }
+
+        .game-selector { padding: 15px 20px; display: flex; gap: 10px; overflow-x: auto; border-bottom: 1px solid var(--border); background: #0f1318; scrollbar-width: none; flex-shrink: 0; }
 
         /* =========================================
            WINGO COMPLETE CSS
@@ -740,6 +835,7 @@
             <form id="register-form" class="hidden">
                 <div class="input-group"><label>Username</label><input type="text" id="reg-user" class="input-field" required></div>
                 <div class="input-group"><label>Password</label><input type="password" id="reg-pass" class="input-field" required></div>
+                <div class="input-group"><label>Agent Referral Code (Optional)</label><input type="text" id="reg-referral" class="input-field" placeholder="Enter agent UID if invited"></div>
                 <button type="submit" class="btn btn-primary" id="btn-reg-submit">CREATE ACCOUNT</button>
             </form>
         </div>
@@ -752,15 +848,27 @@
             <div class="nav-item active"><i class="fa-solid fa-gamepad"></i> Games</div>
             <div class="nav-item" onclick="openModal('deposit-modal')"><i class="fa-solid fa-wallet"></i> Deposit</div>
             <div class="nav-item" onclick="openWithdraw()"><i class="fa-solid fa-money-bill-transfer"></i> Withdraw</div>
+            <div class="nav-item" onclick="openReferral()"><i class="fa-solid fa-user-plus"></i> Invite</div>
             <div class="nav-item" onclick="openProfile()"><i class="fa-solid fa-user-circle"></i> My Account</div>
+            <div class="nav-item" onclick="openAgentPanel()"><i class="fa-solid fa-users-gear"></i> Agents</div>
             <div class="nav-item" onclick="openAdminLogin()"><i class="fa-solid fa-lock"></i> Admin Panel</div>
             <div class="nav-item" onclick="location.reload()"><i class="fa-solid fa-power-off"></i> Logout</div>
         </aside>
 
         <main>
             <header>
-                <div style="font-weight:800; font-size:18px;">LIVE CASINO</div>
-                <div class="user-pill">
+                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <div style="font-weight:800; font-size:18px;">LIVE CASINO</div>
+                    <div class="vip-tier-display">
+                        <span class="vip-badge" id="vip-badge">BRONZE</span>
+                    </div>
+                    <div class="streak-display" id="streak-display">
+                        <span class="streak-fire">🔥</span>
+                        <span class="streak-count" id="streak-count">0</span>
+                        <span class="streak-label">STREAK</span>
+                    </div>
+                </div>
+                <div class="user-pill" style="display:flex; align-items:center; gap:10px;">
                     <div class="balance-pill">
                         <i class="fa-solid fa-coins"></i> <span id="balance-display">0.00</span> PKR
                     </div>
@@ -770,6 +878,21 @@
                     </div>
                 </div>
             </header>
+            <!-- JACKPOT BAR -->
+            <div class="jackpot-bar">
+                <div>
+                    <div class="jackpot-label">🎰 PROGRESSIVE JACKPOT</div>
+                    <div class="jackpot-amount" id="jackpot-amount">₨ 0</div>
+                </div>
+                <button class="jackpot-ticket-btn" id="jackpot-btn" onclick="buyJackpotTicket()">🎟️ BUY TICKET (₨50)</button>
+            </div>
+            <!-- MISSIONS ROW -->
+            <div class="missions-container" id="missions-container"></div>
+            <!-- WINS TICKER -->
+            <div class="wins-ticker">
+                <div class="ticker-item">🔥 <span class="ticker-win">Ali Khan</span> won <span class="ticker-game">₨2,450</span> on Aviator!</div>
+                <div class="ticker-item">💎 <span class="ticker-win">Sara B</span> won <span class="ticker-game">₨1,200</span> on Wingo!</div>
+            </div>
 
             <div class="banner-slider">
                 <div class="banner-slide b-1 active">DEPOSIT 1000 GET 200 FREE</div>
@@ -1100,25 +1223,50 @@
         <input type="file" id="dep-file" class="input-field" style="margin-bottom:10px; background:#1a202c; padding:10px; border:1px solid #444;">
         <button class="btn btn-primary" onclick="initiateDeposit()">SEND TO OWNER</button>
     </div></div>
+
+    <!-- REFERRAL BIND MODAL -->
+    <div id="referral-modal" class="modal"><div class="modal-box"><i class="fa-solid fa-xmark close-modal" onclick="closeModal('referral-modal')"></i><h3 style="margin-bottom:20px; color:var(--primary);">INVITE & EARN</h3>
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:15px;">Enter the UID of the person who invited you. You both get ₨1!</p>
+        <div class="input-group"><label>Your Inviter's UID</label><input type="text" id="referral-uid" class="input-field" placeholder="Enter 6-digit UID"></div>
+        <button class="btn btn-primary" style="margin-top:10px;" onclick="submitReferral()">SUBMIT & CLAIM</button>
+        <div style="margin-top:15px; padding:12px; background:rgba(255,200,0,0.1); border:1px dashed var(--primary); border-radius:8px; text-align:center;">
+            <div style="font-size:11px; color:var(--text-muted);">YOUR INVITE CODE</div>
+            <div style="font-size:20px; font-weight:900; color:var(--primary); font-family:monospace; margin-top:5px;" id="my-referral-code">---</div>
+        </div>
+    </div></div>
     
-    <!-- UPDATED WITHDRAWAL MODAL -->
+    <!-- UPDATED WITHDRAWAL MODAL WITH JAZZCASH/EASYPAISA TABS -->
     <div id="withdraw-modal" class="modal">
         <div class="modal-box">
             <i class="fa-solid fa-xmark close-modal" onclick="closeModal('withdraw-modal')"></i>
             <h3 style="margin-bottom:20px; color:var(--primary);">WITHDRAW FUNDS</h3>
             
+            <!-- Payment Method Tabs -->
+            <div style="display:flex; gap:8px; margin-bottom:15px;">
+                <button id="with-tab-jazzcash" class="btn" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; padding:10px; background:#1a73e8; color:white; border:2px solid transparent;" onclick="selectWithdrawMethod('jazzcash')">
+                    <i class="fa-solid fa-mobile-screen-button" style="font-size:20px;"></i> <span>JazzCash</span>
+                </button>
+                <button id="with-tab-easypaisa" class="btn" style="flex:1; display:flex; align-items:center; justify-content:center; gap:8px; padding:10px; background:#0f9d58; color:white; border:2px solid transparent;" onclick="selectWithdrawMethod('easypaisa')">
+                    <i class="fa-solid fa-building-columns" style="font-size:20px;"></i> <span>EasyPaisa</span>
+                </button>
+            </div>
+            
+            <div id="with-method-info" style="font-size:11px; color:var(--text-muted); margin-bottom:10px; text-align:center;">
+                Selected: <span id="with-selected-method" style="color:var(--primary); font-weight:bold;">JazzCash</span>
+            </div>
+
             <div class="input-group">
                 <label>Amount (PKR)</label>
-                <input type="number" id="with-amount" class="input-field" placeholder="1000">
+                <input type="number" id="with-amount" class="input-field" placeholder="Minimum 500">
             </div>
 
             <div class="input-group">
-                <label>Easypaisa / Jazzcash Name</label>
-                <input type="text" id="with-name" class="input-field" placeholder="Account Holder Name">
+                <label>Account Holder Name</label>
+                <input type="text" id="with-name" class="input-field" placeholder="Full Name as per CNIC">
             </div>
 
             <div class="input-group">
-                <label>Account Number</label>
+                <label id="with-account-label">JazzCash Account Number</label>
                 <input type="text" id="with-num" class="input-field" placeholder="03XX-XXXXXXX">
             </div>
 
@@ -1130,7 +1278,9 @@
             <div id="with-error" style="color:var(--red); font-size:12px; margin-bottom:10px; min-height:15px;"></div>
             <div style="margin-top:10px; font-size:11px; color:orange;">*Requires 3x wagering on approved deposit amount before withdrawal.</div>
             
-            <button class="btn btn-success" style="margin-top:10px;" onclick="initiateWithdraw()">REQUEST WITHDRAWAL</button>
+            <div style="display:flex; gap:10px; margin-top:10px;">
+                <button class="btn btn-success" style="flex:1;" onclick="initiateWithdraw()">REQUEST WITHDRAWAL</button>
+            </div>
         </div>
     </div>
     
@@ -1259,6 +1409,23 @@
                     console.log("Deposit approved - balance and deposit total updated");
                 }
             });
+            socket.on("wingoWin", (data) => {
+                if(data && data.username === currentUser?.username) {
+                    currentUser.balance += data.amount;
+                    currentUser.totalWon = (currentUser.totalWon || 0) + data.amount;
+                    DB.updateUser(currentUser);
+                    updateUI();
+                    // Show win popup
+                    setTimeout(() => showCustomPopup('win', 'WINGO WIN!', data.amount.toFixed(2) + ' PKR', `Number: ${data.number} | Period #${data.periodId} | ${data.multiplier}x`), 300);
+                    gameState.wingoBet.active = false;
+                    const btn = document.getElementById('w-place-btn');
+                    if(btn) {
+                        btn.innerText = 'NEXT ROUND...';
+                        btn.style.background = '#333';
+                        btn.disabled = true;
+                    }
+                }
+            });
             socket.on("newDeposit", (data) => {
                 if(document.getElementById('admin-panel') && !document.getElementById('admin-panel').classList.contains('hidden')) {
                     loadAdminData();
@@ -1351,29 +1518,83 @@
             }
         }
         
-        function handleLogin(e) {
+        async function handleLogin(e) {
             const u = document.getElementById('login-user').value.trim();
             const p = document.getElementById('login-pass').value.trim();
             if(!u || !p) { alert("Please enter Username and Password"); return; }
-            const user = DB.findUser(u);
-            if(user && user.password === p) {
-                if(user.isLocked) { alert("ACCOUNT LOCKED!"); return; }
-                loginSuccess(user);
-            } else { alert("Invalid Username or Password"); }
+            try {
+                const btn = document.getElementById('btn-login-submit');
+                btn.disabled = true; btn.innerText = "LOGGING IN...";
+                const res = await fetch('https://myproject-production-a8c0.up.railway.app/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p })
+                });
+                const data = await res.json();
+                btn.disabled = false; btn.innerText = "LOGIN";
+                if(data.success) {
+                    data.user.password = p;
+                    loginSuccess(data.user);
+                } else {
+                    alert(data.message || "Invalid Username or Password");
+                }
+            } catch(err) {
+                document.getElementById('btn-login-submit').disabled = false;
+                document.getElementById('btn-login-submit').innerText = "LOGIN";
+                // Fallback to local DB if server unreachable
+                const user = DB.findUser(u);
+                if(user && user.password === p) {
+                    if(user.isLocked) { alert("ACCOUNT LOCKED!"); return; }
+                    loginSuccess(user);
+                } else { alert("Server offline and no local account found."); }
+            }
         }
 
-        function handleRegister(e) {
+        async function handleRegister(e) {
             const u = document.getElementById('reg-user').value.trim();
             const p = document.getElementById('reg-pass').value.trim();
             if(!u || !p) { alert("Please enter Username and Password"); return; }
-            if(DB.findUser(u)) { alert("Username taken"); return; }
-            const newUser = { username: u, password: p, balance: 0, totalWagered: 0, totalDeposited: 0, bindName: '', bindNum: '', uid: Math.floor(100000 + Math.random() * 900000), depositCount: 0, vipClaimed: false, lastAction: 'Registered', lastSeen: Date.now(), ip: '192.168.1.'+Math.floor(Math.random()*255), isLocked: false };
-            const users = DB.get('sw_users'); 
-            users.push(newUser);
-            if(DB.save('sw_users', users)) { 
-                alert("Account Created!"); 
-                loginSuccess(newUser); 
-            } else { alert("Error creating account."); }
+            try {
+                const btn = document.getElementById('btn-reg-submit');
+                btn.disabled = true; btn.innerText = "CREATING...";
+                const res = await fetch('https://myproject-production-a8c0.up.railway.app/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p })
+                });
+                const data = await res.json();
+                btn.disabled = false; btn.innerText = "CREATE ACCOUNT";
+                if(data.success) {
+                    alert("Account Created! Please login.");
+                    // Auto-switch to login
+                    switchTab('login');
+                    document.getElementById('login-user').value = u;
+                } else {
+                    alert(data.message || "Error creating account.");
+                }
+            } catch(err) {
+                document.getElementById('btn-reg-submit').disabled = false;
+                document.getElementById('btn-reg-submit').innerText = "CREATE ACCOUNT";
+                // Fallback to local DB
+                if(DB.findUser(u)) { alert("Username taken"); return; }
+                const referralCode = document.getElementById('reg-referral').value.trim();
+                const newUser = { username: u, password: p, balance: 0, totalWagered: 0, totalDeposited: 0, bindName: '', bindNum: '', uid: Math.floor(100000 + Math.random() * 900000), depositCount: 0, vipClaimed: false, lastAction: 'Registered', lastSeen: Date.now(), ip: '192.168.1.'+Math.floor(Math.random()*255), isLocked: false, agent: referralCode || '' };
+                const users = DB.get('sw_users'); 
+                users.push(newUser);
+                
+                // Auto-link referral if code entered
+                if(referralCode) {
+                    const agent = DB.findUserByUid(referralCode);
+                    if(agent && agent.username !== u) {
+                        DB.save('sw_referrals_' + u, { used: true, inviter: agent.username });
+                    }
+                }
+                
+                if(DB.save('sw_users', users)) { 
+                    alert("Account Created! (Offline mode)"); 
+                    loginSuccess(newUser); 
+                } else { alert("Error creating account."); }
+            }
         }
 
         function startAdminRefresh() {
@@ -2662,12 +2883,36 @@ try {
             }
         }
 
+        let withdrawMethod = 'jazzcash';
+
+        function selectWithdrawMethod(method) {
+            withdrawMethod = method;
+            const jazzTab = document.getElementById('with-tab-jazzcash');
+            const easyTab = document.getElementById('with-tab-easypaisa');
+            const label = document.getElementById('with-account-label');
+            const methodText = document.getElementById('with-selected-method');
+            
+            if(method === 'jazzcash') {
+                jazzTab.style.borderColor = '#fff';
+                easyTab.style.borderColor = 'transparent';
+                if(label) label.innerText = 'JazzCash Account Number';
+                if(methodText) methodText.innerText = 'JazzCash';
+            } else {
+                easyTab.style.borderColor = '#fff';
+                jazzTab.style.borderColor = 'transparent';
+                if(label) label.innerText = 'EasyPaisa Account Number';
+                if(methodText) methodText.innerText = 'EasyPaisa';
+            }
+        }
+
         function openWithdraw() {
             document.getElementById('with-amount').value = '';
             document.getElementById('with-name').value = '';
             document.getElementById('with-num').value = '';
             document.getElementById('with-pass').value = '';
             document.getElementById('with-error').innerText = '';
+            withdrawMethod = 'jazzcash';
+            selectWithdrawMethod('jazzcash');
             openModal('withdraw-modal');
         }
 
@@ -2693,8 +2938,9 @@ try {
                 return errDiv.innerText = `Wagering requirement not met! Deposited: ${currentUser.totalDeposited.toFixed(0)} | Wagered: ${currentUser.totalWagered.toFixed(0)} | Required: ${requiredWager.toFixed(0)} | Still need: ${stillNeed} PKR`;
             }
             if(amount > currentUser.balance) return errDiv.innerText = "Insufficient balance.";
+            if(amount < 500) return errDiv.innerText = "Minimum withdrawal amount is 500 PKR.";
 
-            if(confirm("Confirm Withdrawal Request?")) {
+            if(confirm("Confirm Withdrawal via " + (withdrawMethod === 'jazzcash' ? 'JazzCash' : 'EasyPaisa') + "?")) {
                 currentUser.balance -= amount;
                 DB.updateUser(currentUser);
                 updateUI();
@@ -2705,7 +2951,7 @@ try {
                     type: 'withdraw',
                     user: currentUser.username,
                     amount: amount,
-                    details: `${name} - ${num}`,
+                    details: `${name} - ${num} (${withdrawMethod.toUpperCase()})`,
                     status: 'pending',
                     createdAt: new Date().toISOString()
                 });
@@ -2713,7 +2959,7 @@ try {
                 renderUserTransactionHistory();
                 
                 closeModal('withdraw-modal');
-                alert("Withdrawal Request Submitted Successfully!");
+                alert("Withdrawal Request Submitted via " + (withdrawMethod === 'jazzcash' ? 'JazzCash!' : 'EasyPaisa!'));
             }
         }
 
@@ -3441,6 +3687,411 @@ try {
                 refreshAllAdminData();
             }
         }, 5000);
+
+        // =========================================
+        // EXCLUSIVE FEATURES
+        // =========================================
+
+        // --- JACKPOT (RIGGED - NEVER LETS REAL PLAYERS WIN) ---
+        let jackpotAmount = 5000;
+        let jackpotTickets = [];
+        const JACKPOT_FAKE_WINNERS = ['CryptoKing', 'LuckyBhai', 'JackpotJutt', 'PKR_Millionaire', 'GoldWinner', 'CasinoShah'];
+
+        function updateJackpotDisplay() {
+            const el = document.getElementById('jackpot-amount');
+            if(el) el.innerText = '₨ ' + jackpotAmount.toLocaleString();
+        }
+
+        function buyJackpotTicket() {
+            if(!currentUser) return showCustomPopup('info', 'LOGIN FIRST', '0', 'Please login to buy tickets.');
+            const cost = 100;
+            if(currentUser.balance < cost) return showCustomPopup('info', 'INSUFFICIENT', '0', 'You need ₨100 for a ticket.');
+            
+            currentUser.balance -= cost;
+            DB.updateUser(currentUser);
+            updateUI();
+            
+            jackpotAmount += cost;
+            jackpotTickets.push(currentUser.username);
+            updateJackpotDisplay();
+            
+            // NEVER give jackpot to real player - only fake names win
+            // But show a "someone else won" message occasionally to create FOMO
+            if(jackpotTickets.length > 0 && Math.random() < 1/150) {
+                const fakeWinner = JACKPOT_FAKE_WINNERS[Math.floor(Math.random() * JACKPOT_FAKE_WINNERS.length)];
+                const winAmount = jackpotAmount;
+                // Fake winner takes it - not the player
+                jackpotAmount = 5000;
+                jackpotTickets = [];
+                updateJackpotDisplay();
+                showCustomPopup('win', '🎰 JACKPOT WON!', '₨ ' + winAmount.toLocaleString(), fakeWinner + ' won the jackpot! Better luck next time!');
+            } else {
+                showCustomPopup('info', 'TICKET BOUGHT', '₨100', 'You entered the jackpot draw!');
+            }
+        }
+
+        // --- AGENT SYSTEM - Daily Deposit Commission (Resets 7AM PKT) ---
+        function getPKTResetTime() {
+            // Pakistan is UTC+5, so 7AM PKT = 2AM UTC
+            const now = new Date();
+            // Get current time in PKT
+            const pktOffset = 5 * 60; // 5 hours in minutes
+            const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const pktMs = utcMs + (pktOffset * 60000);
+            const pktDate = new Date(pktMs);
+            
+            // Today's reset at 7AM PKT
+            const resetToday = new Date(pktDate);
+            resetToday.setHours(7, 0, 0, 0);
+            
+            // If current PKT time is before 7AM, reset was yesterday
+            // If after 7AM, reset is today at 7AM
+            if (pktDate.getTime() < resetToday.getTime()) {
+                resetToday.setDate(resetToday.getDate() - 1);
+            }
+            
+            // Convert back to UTC for storage
+            const resetUtcMs = resetToday.getTime() - (pktOffset * 60000);
+            return new Date(resetUtcMs);
+        }
+
+        function getAgentDayId() {
+            const resetTime = getPKTResetTime();
+            return resetTime.toISOString().split('T')[0] + '_agent';
+        }
+
+        function getTodayAgentDeposits(agentUid) {
+            const key = 'sw_agent_deposits_' + getAgentDayId();
+            const data = DB.get(key) || {};
+            return data[agentUid] || 0;
+        }
+
+        function recordAgentDeposit(agentUid, amount) {
+            const dayId = getAgentDayId();
+            const key = 'sw_agent_deposits_' + dayId;
+            const data = DB.get(key) || {};
+            data[agentUid] = (data[agentUid] || 0) + amount;
+            DB.save(key, data);
+        }
+
+        // Intercept deposit approval to credit agent commission
+        const origAdminAction = adminAction;
+        adminAction = function(id, status) {
+            let reqs = DB.get('sw_reqs'); 
+            const req = reqs.find(r => r.id === id);
+            
+            // If it's a deposit being approved, find the agent
+            if(req && req.type === 'deposit' && status === 'approved') {
+                const user = DB.findUser(req.user);
+                if(user && user.agent) {
+                    const agent = DB.findUserByUid(user.agent);
+                    if(agent) {
+                        // 5% of the deposit goes to agent
+                        const commission = Math.floor(req.amount * 0.05);
+                        agent.balance += commission;
+                        agent.totalWon = (agent.totalWon || 0) + commission;
+                        DB.updateUser(agent);
+                        
+                        // Also record for daily tracking
+                        recordAgentDeposit(agent.uid, req.amount);
+                        
+                        // If agent is viewing, update UI
+                        if(currentUser && currentUser.username === agent.username) {
+                            currentUser = DB.findUser(currentUser.username);
+                            updateUI();
+                        }
+                    }
+                }
+            }
+            
+            // Call original
+            origAdminAction(id, status);
+        };
+
+        function openAgentPanel() {
+            if(!currentUser) return showCustomPopup('info', 'LOGIN FIRST', '0', 'Login to access agent panel.');
+            
+            // Find all users who used this user's UID as referral
+            const allUsers = DB.get('sw_users') || [];
+            const referrals = allUsers.filter(u => {
+                const ref = DB.get('sw_referrals_' + u.username);
+                return ref && ref.inviter === currentUser.username;
+            });
+            
+            // Get today's deposit total (resets at 7AM PKT)
+            const todayDeposits = getTodayAgentDeposits(currentUser.uid);
+            const todayCommission = Math.floor(todayDeposits * 0.05);
+            
+            // Get next reset time
+            const nextReset = new Date(getPKTResetTime().getTime() + 24 * 60 * 60 * 1000);
+            const resetTimeStr = nextReset.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Karachi' });
+            
+            const totalDepositedByTeam = referrals.reduce((sum, u) => sum + (u.totalDeposited || 0), 0);
+            
+            let msg = `
+                <div style="margin-bottom:10px; padding:8px; background:rgba(0,231,1,0.1); border:1px solid var(--green); border-radius:8px; text-align:center;">
+                    <div style="font-size:10px; color:#aaa;">TODAY'S DEPOSITS (Resets at 7AM PKT)</div>
+                    <div style="font-size:24px; font-weight:900; color:var(--green); margin-top:5px;">₨${todayDeposits.toLocaleString()}</div>
+                    <div style="font-size:11px; color:var(--primary); margin-top:5px;">Your 5% Commission: <b style="font-size:18px;">₨${todayCommission.toLocaleString()}</b></div>
+                    <div style="font-size:9px; color:#888; margin-top:5px;">Resets: ${resetTimeStr}</div>
+                </div>
+                <div style="background:#0a0a0a; padding:12px; border-radius:8px; margin:8px 0;">
+                    <div>Team Members: <b style="color:white;">${referrals.length}</b></div>
+                    <div>Team All-Time Deposited: <b style="color:var(--green);">₨${totalDepositedByTeam.toLocaleString()}</b></div>
+                </div>
+            `;
+            
+            if(referrals.length > 0) {
+                msg += '<div style="margin-top:10px; font-size:12px; color:var(--text-muted);">Your Team:</div>';
+                referrals.forEach(u => {
+                    // Check if this team member deposited today
+                    const todayTeamDeposit = u.agent === currentUser.uid ? "(tracked)" : "";
+                    msg += `<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #222; font-size:13px;">
+                        <span>${u.username}</span>
+                        <span style="color:var(--primary);">₨${(u.totalDeposited || 0).toFixed(0)}</span>
+                    </div>`;
+                });
+            } else {
+                msg += '<div style="margin-top:15px; color:#888; text-align:center;">No team members yet.<br>Share your UID to build your agency!</div>';
+            }
+            
+            msg += '<div style="margin-top:15px; padding:10px; background:rgba(255,200,0,0.1); border:1px dashed var(--primary); border-radius:8px; text-align:center;">';
+            msg += '<div style="font-size:11px; color:var(--text-muted);">YOUR AGENT CODE (UID)</div>';
+            msg += '<div style="font-size:24px; font-weight:900; color:var(--primary); font-family:monospace; margin-top:3px;">' + (currentUser.uid || '---') + '</div>';
+            msg += '<div style="font-size:10px; color:#888; margin-top:5px;">Share this code with new players. You earn 5% of every deposit they make!</div>';
+            msg += '</div>';
+            
+            showCustomPopup('info', 'AGENT DASHBOARD', '₨' + todayCommission, msg);
+        }
+
+        // --- REFERRAL SYSTEM ---
+        function openReferral() {
+            if(!currentUser) return showCustomPopup('info', 'LOGIN FIRST', '0', 'Login to see your invite code.');
+            document.getElementById('my-referral-code').innerText = currentUser.uid || '---';
+            openModal('referral-modal');
+        }
+
+        function submitReferral() {
+            if(!currentUser) return showCustomPopup('info', 'LOGIN FIRST', '0', 'Please login first.');
+            const inviterUid = document.getElementById('referral-uid').value.trim();
+            if(!inviterUid) return showCustomPopup('info', 'ENTER UID', '0', 'Enter the UID of the person who invited you.');
+            
+            // Check if already used referral
+            if(DB.get('sw_referrals_' + currentUser.username)) {
+                return showCustomPopup('info', 'ALREADY USED', '0', 'You already submitted a referral code.');
+            }
+            
+            // Find inviter
+            const inviter = DB.findUserByUid(inviterUid);
+            if(!inviter) return showCustomPopup('info', 'INVALID UID', '0', 'No user found with that UID.');
+            if(inviter.username === currentUser.username) return showCustomPopup('info', 'CANNOT SELF', '0', 'You cannot invite yourself.');
+            
+            // Both get ₨1
+            currentUser.balance += 1;
+            inviter.balance += 1;
+            DB.updateUser(currentUser);
+            DB.updateUser(inviter);
+            updateUI();
+            
+            // Mark referral as used
+            DB.save('sw_referrals_' + currentUser.username, { used: true, inviter: inviter.username });
+            
+            closeModal('referral-modal');
+            showCustomPopup('win', '🎉 REFERRAL COMPLETE!', '+₨1', 'You and ' + inviter.username + ' each got ₨1!');
+        }
+
+        // --- MISSIONS SYSTEM (Harder - Makes players lose money, tiny rewards) ---
+        const MISSIONS = [
+            { id: 'play_aviator', icon: '✈️', title: 'Play Aviator 10x', need: 10, reward: 5, type: 'play', game: 'aviator' },
+            { id: 'play_wingo', icon: '⭐', title: 'Play Wingo 15x', need: 15, reward: 8, type: 'play', game: 'wingo' },
+            { id: 'win_streak_5', icon: '🔥', title: 'Win 5 in a Row', need: 5, reward: 10, type: 'streak', game: 'any' },
+            { id: 'bet_2000', icon: '💎', title: 'Bet ₨2,000 Total', need: 2000, reward: 5, type: 'wager', game: 'any' },
+            { id: 'play_slots_10', icon: '🎰', title: 'Play Slots 10x', need: 10, reward: 6, type: 'play', game: 'spins' },
+            { id: 'win_big_500', icon: '🏆', title: 'Win ₨500+ in 1 Bet', need: 500, reward: 10, type: 'bigwin', game: 'any' }
+        ];
+
+        function initMissions() {
+            if(!DB.get('sw_missions')) {
+                DB.save('sw_missions', MISSIONS.map(m => ({ ...m, progress: 0, completed: false })));
+            }
+        }
+
+        function getMissions() {
+            return (DB.get('sw_missions') || MISSIONS).map(m => ({ ...m, ...MISSIONS.find(x => x.id === m.id) }));
+        }
+
+        function saveMissions(missions) {
+            DB.save('sw_missions', missions.map(m => ({ id: m.id, progress: m.progress, completed: m.completed })));
+        }
+
+        function renderMissions() {
+            const container = document.getElementById('missions-container');
+            if(!container) return;
+            const missions = getMissions();
+            container.innerHTML = missions.map(m => {
+                const pct = Math.min(100, (m.progress / m.need) * 100);
+                return `
+                    <div class="mission-card ${m.completed ? 'completed' : ''}">
+                        <div class="mission-icon">${m.icon}</div>
+                        <div class="mission-title">${m.title}</div>
+                        <div class="mission-progress">${m.completed ? '✓ COMPLETED' : `${m.progress}/${m.need}`}</div>
+                        <div class="mission-bar"><div class="mission-fill" style="width:${pct}%"></div></div>
+                        <div class="mission-reward">${m.completed ? 'Claimed' : `+₨${m.reward}`}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function trackMissionProgress(type, game, amount) {
+            const missions = getMissions();
+            let changed = false;
+            missions.forEach(m => {
+                if(m.completed) return;
+                if(type === 'play' && m.type === 'play' && (m.game === game || m.game === 'any')) {
+                    m.progress = Math.min(m.need, m.progress + 1);
+                    changed = true;
+                }
+                if(type === 'wager' && m.type === 'wager' && amount) {
+                    m.progress = Math.min(m.need, m.progress + amount);
+                    changed = true;
+                }
+                if(type === 'bigwin' && m.type === 'bigwin' && amount >= 100) {
+                    m.progress = Math.min(m.need, m.progress + 1);
+                    changed = true;
+                }
+                if(type === 'streak' && m.type === 'streak') {
+                    m.progress = Math.min(m.need, m.progress + 1);
+                    changed = true;
+                }
+                if(m.progress >= m.need && !m.completed) {
+                    m.completed = true;
+                    currentUser.balance += m.reward;
+                    DB.updateUser(currentUser);
+                    updateUI();
+                    showCustomPopup('win', '🎯 MISSION COMPLETE!', '+₨' + m.reward, m.title);
+                    changed = true;
+                }
+            });
+            if(changed) {
+                saveMissions(missions);
+                renderMissions();
+            }
+        }
+
+        // --- VIP TIERS ---
+        const VIP_TIERS = [
+            { name: 'BRONZE', minDeposit: 0, badgeClass: 'bronze' },
+            { name: 'SILVER', minDeposit: 5000, badgeClass: 'silver' },
+            { name: 'GOLD', minDeposit: 25000, badgeClass: 'gold' },
+            { name: 'PLATINUM', minDeposit: 100000, badgeClass: 'platinum' },
+            { name: 'DIAMOND', minDeposit: 500000, badgeClass: 'diamond' }
+        ];
+
+        function updateVIPTier() {
+            const badge = document.getElementById('vip-badge');
+            if(!badge || !currentUser) return;
+            const deposited = currentUser.totalDeposited || 0;
+            let tier = VIP_TIERS[0];
+            for(const t of VIP_TIERS) {
+                if(deposited >= t.minDeposit) tier = t;
+            }
+            badge.innerText = tier.name;
+            badge.className = 'vip-badge ' + tier.badgeClass;
+        }
+
+        // --- STREAK SYSTEM ---
+        let winStreak = 0;
+
+        function updateStreak(won) {
+            const display = document.getElementById('streak-display');
+            const count = document.getElementById('streak-count');
+            if(!display || !count) return;
+            if(won) {
+                winStreak++;
+                count.innerText = winStreak;
+                display.classList.add('active');
+                if(winStreak === 2) trackMissionProgress('streak', 'any', 0);
+                // Every 5 wins bonus
+                if(winStreak > 0 && winStreak % 5 === 0) {
+                    const bonus = winStreak * 10;
+                    currentUser.balance += bonus;
+                    DB.updateUser(currentUser);
+                    updateUI();
+                    showCustomPopup('win', '🔥 ' + winStreak + 'x STREAK BONUS!', '+₨' + bonus, 'Keep it going!');
+                }
+            } else {
+                winStreak = 0;
+                count.innerText = '0';
+                display.classList.remove('active');
+            }
+        }
+
+        // Override processWin to track missions and streaks
+        const origProcessWin = processWin;
+        processWin = function(amount, el) {
+            origProcessWin(amount, el);
+            if(currentUser) {
+                trackMissionProgress('wager', gameState.type, amount);
+                if(amount >= 100) trackMissionProgress('bigwin', gameState.type, amount);
+                updateStreak(true);
+                updateVIPTier();
+            }
+        };
+
+        // Override processLoss to reset streak
+        const origProcessLoss = processLoss;
+        processLoss = function(el) {
+            origProcessLoss(el);
+            updateStreak(false);
+        };
+
+        // Override handleGameAction to track plays
+        const origHandleGame = handleGameAction;
+        handleGameAction = function() {
+            const bet = parseFloat(document.getElementById('bet-amount').value);
+            if(bet > 0 && currentUser && currentUser.balance >= bet) {
+                trackMissionProgress('play', gameState.type, 0);
+                trackMissionProgress('wager', gameState.type, bet);
+            }
+            origHandleGame();
+        };
+
+        // Override wingoPlaceBet to track wingo plays
+        const origWingoPlace = wingoPlaceBet;
+        wingoPlaceBet = function() {
+            if(currentUser) {
+                trackMissionProgress('play', 'wingo', 0);
+                trackMissionProgress('wager', 'wingo', gameState.wingoBet.amount);
+            }
+            origWingoPlace();
+        };
+
+        // Initialize
+        initMissions();
+        renderMissions();
+        updateJackpotDisplay();
+
+        // Update ticker with fake wins for atmosphere
+        const fakeWins = [
+            { user: 'Ali Khan', amount: 2450, game: 'Aviator' },
+            { user: 'Sara B', amount: 1200, game: 'Wingo' },
+            { user: 'Bhaya Ji', amount: 3800, game: 'Mines' },
+            { user: 'PakWinner', amount: 5600, game: 'Plinko' },
+            { user: 'KarachiBoy', amount: 1500, game: 'Dragon Tiger' },
+            { user: 'LahoriKing', amount: 7200, game: 'Spins' }
+        ];
+        setInterval(() => {
+            const ticker = document.querySelector('.wins-ticker');
+            if(!ticker) return;
+            const w = fakeWins[Math.floor(Math.random() * fakeWins.length)];
+            ticker.innerHTML = `<div class="ticker-item" style="opacity:1;animation:none;">🔥 <span class="ticker-win">${w.user}</span> won <span class="ticker-game">₨${w.amount.toLocaleString()}</span> on ${w.game}!</div>`;
+            setTimeout(() => {
+                ticker.innerHTML = `
+                    <div class="ticker-item">🔥 <span class="ticker-win">Ali Khan</span> won <span class="ticker-game">₨2,450</span> on Aviator!</div>
+                    <div class="ticker-item">💎 <span class="ticker-win">Sara B</span> won <span class="ticker-game">₨1,200</span> on Wingo!</div>
+                `;
+            }, 4000);
+        }, 6000);
 
     </script>
 </body> 
